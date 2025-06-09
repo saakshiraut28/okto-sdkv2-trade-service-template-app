@@ -4,7 +4,11 @@ import { NavigateFunction, useNavigate } from "react-router-dom";
 import WalletInfoCard from "../components/WalletInfoCard";
 import { WalletContext } from "../context/WalletContext";
 
-import { connectWallet } from "../utils/wallet";
+import { connectEVMWallet, disconnectEvmWallet } from "../utils/evmWallet";
+import {
+  connectSolanaWallet,
+  disconnectSolanaWallet,
+} from "../utils/solanaWallet";
 
 import styles from "../styles/HomePageStyles";
 
@@ -16,18 +20,10 @@ class HomePage extends Component<HomePageProps> {
   static contextType = WalletContext;
   declare context: React.ContextType<typeof WalletContext>;
 
-  renderConnectButton = () => (
-    <button
-      onClick={() => connectWallet(this.context.setWalletState)}
-      style={styles.button}
-    >
-      Connect MetaMask
-    </button>
-  );
-
   handleTradeNavigation = () => {
-    const { isConnected } = this.context;
-    if (isConnected) {
+    const { isEvmConnected, isSolanaConnected } = this.context;
+    if (isEvmConnected || isSolanaConnected) {
+      console.log("Navigating to trade page...");
       this.props.navigate("/trade");
     } else {
       alert("Please connect your wallet to access the trade form.");
@@ -35,7 +31,16 @@ class HomePage extends Component<HomePageProps> {
   };
 
   render() {
-    const { walletAddress, chainId, isConnected } = this.context;
+    const {
+      evmWalletAddress,
+      evmChainId,
+      isEvmConnected,
+      solanaWalletAddress,
+      solanaNetwork,
+      isSolanaConnected,
+    } = this.context;
+
+    const isAnyWalletConnected = isEvmConnected || isSolanaConnected;
 
     return (
       <div style={styles.container}>
@@ -44,32 +49,63 @@ class HomePage extends Component<HomePageProps> {
           <p style={styles.description}>
             This is a simple frontend client for a trade service.
           </p>
+
+          <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem" }}>
+            {isEvmConnected ? (
+              <button
+                onClick={() => disconnectEvmWallet()}
+                style={styles.button}
+              >
+                Disconnect MetaMask (EVM)
+              </button>
+            ) : (
+              <button
+                onClick={() => connectEVMWallet(this.context.setWalletState)}
+                style={styles.button}
+              >
+                Connect MetaMask (EVM)
+              </button>
+            )}
+
+            {isSolanaConnected ? (
+              <button
+                onClick={() =>
+                  disconnectSolanaWallet(this.context.setWalletState)
+                }
+                style={styles.button}
+              >
+                Disconnect Phantom (Solana)
+              </button>
+            ) : (
+              <button
+                onClick={() => connectSolanaWallet(this.context.setWalletState)}
+                style={styles.button}
+              >
+                Connect Phantom (Solana)
+              </button>
+            )}
+          </div>
+
           <button
             onClick={this.handleTradeNavigation}
             style={{
               ...styles.secondaryButton,
-              opacity: isConnected ? 1 : 0.5,
-              cursor: isConnected ? "pointer" : "not-allowed",
+              opacity: isAnyWalletConnected ? 1 : 0.5,
+              cursor: isAnyWalletConnected ? "pointer" : "not-allowed",
             }}
-            disabled={!isConnected}
+            disabled={!isAnyWalletConnected}
           >
             Go to Trade Page →
           </button>
 
-          {!isConnected && (
-            <p style={styles.warningText}>
-              ⚠️ Connect your wallet to access the trade form.
-            </p>
-          )}
-
-          {isConnected ? (
-            <>
-              <h3 style={styles.cardTitle}>Wallet Info</h3>
-              <WalletInfoCard walletAddress={walletAddress} chainId={chainId} />
-            </>
-          ) : (
-            this.renderConnectButton()
-          )}
+          <WalletInfoCard
+            evmWalletAddress={evmWalletAddress}
+            evmChainId={evmChainId}
+            isEvmConnected={isEvmConnected}
+            solanaWalletAddress={solanaWalletAddress}
+            solanaNetwork={solanaNetwork}
+            isSolanaConnected={isSolanaConnected}
+          />
         </div>
       </div>
     );

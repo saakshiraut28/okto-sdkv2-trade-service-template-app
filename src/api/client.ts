@@ -1,16 +1,31 @@
 // src/api/client.ts
 import axios from "axios";
+import {
+  TRADE_PRODUCTION_API_KEY,
+  TRADE_SANDBOX_API_KEY,
+  TRADE_STAGING_API_KEY,
+} from "./consts";
 
-export const tradeServiceClient = axios.create({
-  baseURL: "/api",
+export const tradeServiceStagingClient = axios.create({
+  baseURL: "https://okto-trade-service-kong.oktostage.com/v1",
   timeout: 30000,
+  headers: {
+    "X-Api-Key": TRADE_STAGING_API_KEY,
+  },
 });
 
-// Add interceptor to inject custom header
-tradeServiceClient.interceptors.request.use((config) => {
-  const secret = import.meta.env.VITE_TRADE_SERVICE_SECRET;
-  if (secret) {
-    config.headers["x-authorization-secret"] = secret;
-  }
-  return config;
+export const tradeServiceSandboxClient = axios.create({
+  baseURL: "https://sandbox-okto-trade-service-kong.oktostage.com/v1",
+  timeout: 30000,
+  headers: {
+    "X-Api-Key": TRADE_SANDBOX_API_KEY,
+  },
+});
+
+export const tradeServiceProductionClient = axios.create({
+  baseURL: "https://okto-trade-service-kong.okto.tech/v1",
+  timeout: 30000,
+  headers: {
+    "X-Api-Key": TRADE_PRODUCTION_API_KEY,
+  },
 });

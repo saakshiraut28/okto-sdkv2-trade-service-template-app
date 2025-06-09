@@ -17,7 +17,15 @@ npm run dev
 The application will be accessible from your browser. The URL will be the following if you have not altered any other settings.
 http://localhost:5173/
 
+You might face issues with Okto wallet plugin that is installed on the browser. It will connect instead of Metamask.
+
+The quickest way is to install Phantom Wallet. Phantom wallet overrides the default ethereum wallet with itself. So whenever any app tries to connect Phantom will be selected. But Phanotm Wallet provides a prompt asking do you want to connect to Metamask or Phantom. Select Metamask. DO NOT SAVE this setting. Saving this setting will make Okto Wallet your default wallet again and cause issues while testing.
+
+You can also use incognito mode. But this might have some other issues.
+
 Will be providing a future update where you will have the option to wallet connect your Okto wallet to test this instead of using a metamask wallet.
+
+This application is also deployed at https://okto-trade-service-client-app.oktostage.com/
 
 # React + TypeScript + Vite
 

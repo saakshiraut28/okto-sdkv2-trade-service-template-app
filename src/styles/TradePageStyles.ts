@@ -43,6 +43,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   formGroup: {
     display: "flex",
     flexDirection: "column",
+    marginBottom: "1rem",
   },
   label: {
     marginBottom: "0.3rem",
@@ -128,6 +129,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: "1rem",
     color: "#00ff99",
     marginTop: "0.5rem",
+  },
+  loader: {
+    border: "4px solid #f3f3f3",
+    borderTop: "4px solid #3498db",
+    width: "100%",
+    height: "100%",
+    animation: "spin 2s linear infinite",
   },
 };
 

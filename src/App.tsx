@@ -4,36 +4,43 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import TradePage from "./pages/TradePage";
 
+import { Buffer } from "buffer";
+
+window.Buffer = Buffer;
+
 import {
   tryEagerConnect,
   handleAccountsChanged,
   handleChainChanged,
-} from "./utils/wallet";
+} from "./utils/evmWallet";
 import { WalletContext } from "./context/WalletContext";
 
 function App() {
-  const { walletAddress, chainId, isConnected, setWalletState } =
+  const { evmWalletAddress, evmChainId, isEvmConnected, setWalletState } =
     useContext(WalletContext);
 
   useEffect(() => {
     tryEagerConnect(setWalletState);
 
+    const eth = window.ethereum as any;
+    if (!eth) return;
+
     const accountListener = (accounts: string[]) => {
-      handleAccountsChanged(accounts, setWalletState, chainId);
+      handleAccountsChanged(accounts, setWalletState, evmChainId);
     };
 
     const chainListener = () => {
-      handleChainChanged(setWalletState, walletAddress, isConnected);
+      handleChainChanged(setWalletState, evmWalletAddress, isEvmConnected);
     };
 
-    window.ethereum?.on("accountsChanged", accountListener);
-    window.ethereum?.on("chainChanged", chainListener);
+    eth.on("accountsChanged", accountListener);
+    eth.on("chainChanged", chainListener);
 
     return () => {
-      window.ethereum?.removeListener("accountsChanged", accountListener);
-      window.ethereum?.removeListener("chainChanged", chainListener);
+      eth.removeListener("accountsChanged", accountListener);
+      eth.removeListener("chainChanged", chainListener);
     };
-  }, [chainId, walletAddress, isConnected, setWalletState]);
+  }, [evmChainId, evmWalletAddress, isEvmConnected, setWalletState]);
 
   return (
     <Routes>
