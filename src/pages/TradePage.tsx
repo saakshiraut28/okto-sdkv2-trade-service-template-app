@@ -7,6 +7,11 @@ import {
 } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ethers } from "ethers";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
+import { Connection, PublicKey } from "@solana/web3.js";
 
 // custom components
 import TokenInput from "../components/TokenInput";
@@ -15,16 +20,15 @@ import ChainSelect from "../components/ChainSelect";
 import AmountInput from "../components/AmountInput";
 
 import { WalletContext } from "../context/WalletContext";
-import { CHAIN_ID_TO_NAME } from "../constants/chains";
+import { CAIP_TO_NAME, CHAIN_ID_TO_NAME } from "../constants/chains";
 import styles from "../styles/TradePageStyles";
-import { TokenInfo } from "../utils/chainHelpers";
 
 import {
   getQuote,
   getBestRoute,
   getCallData,
   registerIntent,
-} from "../api/tradeService";
+} from "../api/tradeServiceClient";
 import {
   GetBestRouteRequest,
   GetQuoteRequest,
@@ -33,6 +37,12 @@ import {
 } from "../types/api/tradeService";
 
 import type { Eip1193Provider } from "ethers";
+import { connectEVMWallet } from "../utils/evmWallet";
+import { connectSolanaWallet } from "../utils/solanaWallet";
+import {
+  SolanaTxPayload,
+  submitPhantomSolanaTransaction,
+} from "../utils/solanaTxnUtils";
 
 // extend window type globally
 declare global {
@@ -46,10 +56,12 @@ interface TradePageProps {
 }
 
 interface TradePageState {
+  environment: string;
   switchingChain: boolean;
   isTxSubmitting: boolean;
   isQuoteLoading: boolean;
   isRouteLoading: boolean;
+  balanceLoading: boolean;
   currentAction:
     | "idle"
     | "get_quote"
@@ -61,8 +73,18 @@ interface TradePageState {
     | "register_intent";
   fromChain: string;
   toChain: string;
-  fromToken: TokenInfo | null;
-  toToken: TokenInfo | null;
+  fromToken: {
+    address: string;
+    symbol: string;
+    decimals: number;
+    isNative: boolean;
+  } | null;
+  toToken: {
+    address: string;
+    symbol: string;
+    decimals: number;
+    isNative: boolean;
+  } | null;
   amount: string;
   balance: string | null;
   quoteOutputAmount: string | null;
@@ -73,15 +95,23 @@ interface TradePageState {
   callDataResponse: GetCallDataResponse | null;
 }
 
+// Feature flag for cross-chain Solana ↔ EVM swaps
+const FEATURE_ENABLE_SOLANA_EVM_CROSS_CHAIN = false;
+
+const SOLANA_USDC = {
+  address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  symbol: "USDC",
+  decimals: 6,
+};
+
 class TradePage extends Component<TradePageProps, TradePageState> {
   static contextType = WalletContext;
   declare context: React.ContextType<typeof WalletContext>;
-  private prevContextChainId: number | null = null;
-  private prevWalletAddress: string | null = null;
 
   constructor(props: TradePageProps) {
     super(props);
     this.state = {
+      environment: "production",
       fromChain: "",
       toChain: "",
       switchingChain: false,
@@ -93,6 +123,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       routeOutputAmount: null,
       isQuoteLoading: false,
       isRouteLoading: false,
+      balanceLoading: false,
       currentAction: "idle",
       routeResponse: null,
       isTxSubmitting: false,
@@ -103,37 +134,13 @@ class TradePage extends Component<TradePageProps, TradePageState> {
   }
 
   componentDidMount(): void {
-    const { chainId } = this.context;
-    const caipChainId = chainId ? `eip155:${chainId}` : "";
+    const { evmChainId } = this.context;
+    const caipChainId = evmChainId ? `eip155:${evmChainId}` : "";
 
     this.setState({
       fromChain: caipChainId,
       toChain: caipChainId, // keep this just for initial default
     });
-
-    this.prevContextChainId = chainId;
-  }
-
-  componentDidUpdate(_: unknown, prevState: TradePageState): void {
-    const currentContextChainId = this.context.chainId;
-
-    if (
-      currentContextChainId &&
-      currentContextChainId !== this.prevContextChainId
-    ) {
-      const caip = `eip155:${currentContextChainId}`;
-      this.setState({ fromChain: caip });
-      this.prevContextChainId = currentContextChainId;
-    }
-
-    if (
-      prevState.fromToken !== this.state.fromToken ||
-      prevState.fromChain !== this.state.fromChain ||
-      this.context.walletAddress !== this.prevWalletAddress
-    ) {
-      if (this.state.fromToken) this.fetchBalance();
-      this.prevWalletAddress = this.context.walletAddress;
-    }
   }
 
   renderChainOptions = () => {
@@ -144,38 +151,72 @@ class TradePage extends Component<TradePageProps, TradePageState> {
     ));
   };
 
-  switchChain = async (caipChainId: string) => {
-    const chainIdHex = `0x${parseInt(caipChainId.split(":")[1], 10).toString(
-      16
-    )}`;
+  getMetamaskProvider = (eth: any) => {
+    if (eth.providers) {
+      return eth.providers.find((p: any) => p.isMetaMask);
+    }
+    return eth;
+  };
 
-    try {
-      this.setState({ switchingChain: true });
-      await window.ethereum?.request({
+  handleFromChainChange = async (newFromChain: string) => {
+    this.setState({
+      switchingChain: true,
+    });
+    const chainType = newFromChain.split(":")[0];
+    const chainId = newFromChain.split(":")[1];
+    const { isEvmConnected, isSolanaConnected, setWalletState } = this.context;
+
+    console.dir({ chainType, isEvmConnected, isSolanaConnected });
+
+    if (chainType === "solana") {
+      const phantom = (window as any).phantom?.solana;
+      if (!phantom?.isPhantom) {
+        toast.error("Phantom Wallet not found");
+        return;
+      }
+      if (!isSolanaConnected) {
+        connectSolanaWallet(setWalletState);
+      }
+      this.setState({
+        fromChain: newFromChain,
+        toChain: FEATURE_ENABLE_SOLANA_EVM_CROSS_CHAIN ? "" : newFromChain,
+        fromToken: null,
+        toToken: null,
+        amount: "",
+        balance: null,
+        switchingChain: false,
+      });
+    } else {
+      // EVM chain
+      if (!isEvmConnected) {
+        await connectEVMWallet(setWalletState);
+      }
+      const metamask = this.getMetamaskProvider(window.ethereum);
+
+      if (!metamask || !metamask.request) {
+        toast.error("MetaMask not found");
+        return;
+      }
+      const chainIdHex = `0x${parseInt(chainId, 10).toString(16)}`;
+
+      await metamask.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: chainIdHex }],
       });
 
-      toast.success("Network switched successfully");
-    } catch (err) {
-      if (
-        typeof err === "object" &&
-        err !== null &&
-        "code" in err &&
-        typeof (err as { code: unknown }).code === "number"
-      ) {
-        const errorCode = (err as { code: number }).code;
-        if (errorCode === 4902) {
-          toast.error("Chain not found in MetaMask");
-        } else {
-          toast.error("Failed to switch network");
-        }
-      } else {
-        console.error("Unexpected error during switchChain:", err);
-        toast.error("Unexpected error while switching network");
-      }
-    } finally {
-      this.setState({ switchingChain: false });
+      setWalletState({
+        evmChainId: Number(chainId),
+        isEvmConnected: true,
+      });
+      this.setState({
+        fromChain: newFromChain,
+        toChain: "",
+        fromToken: null,
+        toToken: null,
+        amount: "",
+        balance: null,
+        switchingChain: false,
+      });
     }
   };
 
@@ -208,43 +249,200 @@ class TradePage extends Component<TradePageProps, TradePageState> {
     }
   };
 
+  getAssociatedTokenAddress = (
+    mint: PublicKey,
+    owner: PublicKey
+  ): PublicKey => {
+    const [associatedTokenAddress] = PublicKey.findProgramAddressSync(
+      [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    return associatedTokenAddress;
+  };
+
   fetchBalance = async () => {
+    this.setState({ balanceLoading: true });
     const { fromChain, fromToken } = this.state;
-    const { walletAddress } = this.context;
-    if (!walletAddress || !fromChain || !fromToken || !window.ethereum) {
-      toast.error("Missing required data for fetching balance");
+    const { evmWalletAddress, solanaWalletAddress } = this.context;
+
+    if (!fromChain || !fromToken) {
+      toast.error("Select a chain and token first");
+      this.setState({ balanceLoading: false });
       return;
     }
 
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+    const chainType = fromChain.split(":")[0];
 
-      if (fromToken.isNative) {
-        const bal = await provider.getBalance(walletAddress);
-        const formatted = ethers.formatUnits(bal, fromToken.decimals);
-        this.setState({ balance: formatted });
-      } else {
-        const tokenContract = new ethers.Contract(
-          fromToken.address,
-          ["function balanceOf(address owner) view returns (uint256)"],
-          provider
-        );
-        const bal = await tokenContract.balanceOf(walletAddress);
-        const formatted = ethers.formatUnits(bal, fromToken.decimals);
-        this.setState({ balance: formatted });
+    if (chainType === "eip155") {
+      if (!evmWalletAddress || !window.ethereum) {
+        toast.error("EVM wallet not connected");
+        this.setState({ balanceLoading: false });
+        return;
       }
+
+      try {
+        const metamask = this.getMetamaskProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider(metamask);
+
+        // console.dir(fromToken);
+        if (
+          fromToken.isNative ||
+          !fromToken.address ||
+          fromToken.address === ""
+        ) {
+          const bal = await provider.getBalance(evmWalletAddress);
+          const formatted = ethers.formatUnits(bal, fromToken.decimals);
+          this.setState({ balance: formatted, balanceLoading: false });
+        } else {
+          const tokenContract = new ethers.Contract(
+            fromToken.address,
+            ["function balanceOf(address) view returns (uint256)"],
+            provider
+          );
+          // console.log({
+          //   evmWalletAddress,
+          //   tokenAddress: fromToken.address,
+          //   tokenContract,
+          // });
+          const bal = await tokenContract.balanceOf(evmWalletAddress);
+          const formatted = ethers.formatUnits(bal, fromToken.decimals);
+          this.setState({ balance: formatted, balanceLoading: false });
+        }
+      } catch (err) {
+        console.error("Failed to fetch EVM balance", err);
+        this.setState({ balance: null, balanceLoading: false });
+      }
+    } else if (chainType === "solana") {
+      if (!solanaWalletAddress) {
+        toast.error("Solana wallet not connected");
+        return;
+      }
+
+      // either use solana url from env or use public node
+      const solanaURl =
+        import.meta.env.VITE_SOLANA_RPC_URL ||
+        "https://api.mainnet-beta.solana.com";
+
+      try {
+        const connection = new Connection(solanaURl);
+        const owner = new PublicKey(solanaWalletAddress);
+
+        let balanceLamports: bigint;
+
+        if (fromToken.isNative) {
+          balanceLamports = BigInt(await connection.getBalance(owner));
+        } else {
+          const mint = new PublicKey(fromToken.address);
+          const ata = this.getAssociatedTokenAddress(mint, owner);
+
+          const accountInfo = await connection.getParsedAccountInfo(ata);
+          const parsedInfo = (accountInfo.value?.data as any)?.parsed?.info;
+
+          if (!parsedInfo || !parsedInfo.tokenAmount) {
+            balanceLamports = BigInt(0);
+          } else {
+            balanceLamports = BigInt(parsedInfo.tokenAmount.amount);
+          }
+        }
+
+        const decimals = fromToken.decimals || 6;
+        const formatted = (Number(balanceLamports) / 10 ** decimals).toString();
+        this.setState({ balance: formatted, balanceLoading: false });
+      } catch (err) {
+        console.error("Failed to fetch Solana balance", err);
+        this.setState({ balance: null, balanceLoading: false });
+      }
+    } else {
+      toast.error("Unsupported chain type for balance fetching");
+      this.setState({ balance: null, balanceLoading: false });
+    }
+  };
+
+  getAllowedToChains = () => {
+    const { fromChain } = this.state;
+    if (!fromChain) return [];
+    // console.log("getAllowedToChains", { fromChain });
+    const fromType = fromChain?.split(":")[0];
+
+    if (!FEATURE_ENABLE_SOLANA_EVM_CROSS_CHAIN) {
+      if (fromType === "solana") return [fromChain];
+      if (fromType === "eip155")
+        return Object.keys(CAIP_TO_NAME).filter((id) =>
+          id.startsWith("eip155")
+        );
+    }
+    return Object.keys(CHAIN_ID_TO_NAME);
+  };
+
+  handleClearForm = () => {
+    try {
+      this.setState({
+        fromToken: null,
+        toToken: null,
+        amount: "",
+        balance: null,
+        quoteOutputAmount: null,
+        routeOutputAmount: null,
+        currentAction: "idle",
+        routeResponse: null,
+        permitSignature: null,
+        permitData: null,
+        callDataResponse: null,
+      });
     } catch (err) {
-      console.error("Failed to fetch balance", err);
-      this.setState({ balance: null });
+      console.error("Failed to clear form:", err);
+      toast.error("Failed to clear form");
     }
   };
 
   handleGetQuote = async () => {
-    const { walletAddress } = this.context;
+    const { evmWalletAddress, solanaWalletAddress } = this.context;
     const { fromChain, toChain, fromToken, toToken, amount } = this.state;
 
     if (!fromChain || !toChain || !fromToken || !toToken || !amount) {
       console.warn("Missing required fields");
+      return;
+    }
+    let fromUserWalletAddress, toUserWalletAddress;
+    let isFromChainSolana = fromChain.startsWith("solana");
+    let isToChainSolana = toChain.startsWith("solana");
+
+    // user wallet address depends on chain. If fromChain is EVM, use evmWalletAddress
+    // if fromChain is Solana, use solanaWalletAddress
+    // similar for toChain
+    if (fromChain.startsWith("eip155")) {
+      if (!evmWalletAddress) {
+        toast.error("Please connect wallet to proceed");
+        return;
+      }
+      fromUserWalletAddress = evmWalletAddress;
+    } else if (fromChain.startsWith("solana")) {
+      if (!solanaWalletAddress) {
+        toast.error("Please connect solana wallet to proceed");
+        return;
+      }
+      fromUserWalletAddress = solanaWalletAddress;
+      isFromChainSolana = true;
+    } else {
+      toast.error("Unsupported fromChain");
+      return;
+    }
+
+    if (toChain.startsWith("eip155")) {
+      if (!evmWalletAddress) {
+        toast.error("Please connect wallet to proceed");
+        return;
+      }
+      toUserWalletAddress = evmWalletAddress;
+    } else if (toChain.startsWith("solana")) {
+      if (!solanaWalletAddress) {
+        toast.error("Please connect solana wallet to proceed");
+        return;
+      }
+      toUserWalletAddress = solanaWalletAddress;
+      isToChainSolana = true;
+    } else {
+      toast.error("Unsupported toChain");
       return;
     }
 
@@ -260,11 +458,15 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       const getQuotePayload: GetQuoteRequest = {
         fromChain,
         toChain,
-        fromToken: fromTokenAddress.toLowerCase(),
-        toToken: toTokenAddress.toLowerCase(),
+        fromToken: isFromChainSolana
+          ? fromTokenAddress
+          : fromTokenAddress.toLowerCase(),
+        toToken: isToChainSolana
+          ? toTokenAddress
+          : toTokenAddress.toLowerCase(),
         fromAmount,
-        fromUserWalletAddress: walletAddress || undefined,
-        toUserWalletAddress: walletAddress || undefined,
+        fromUserWalletAddress,
+        toUserWalletAddress,
       };
 
       this.setState({
@@ -275,7 +477,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       });
 
       // Step 1: Call getQuote
-      const quoteRes = await getQuote(getQuotePayload);
+      const quoteRes = await getQuote(this.state.environment, getQuotePayload);
       console.dir({ quoteRes });
       const quoteOutputAmount = ethers.formatUnits(
         quoteRes.outputAmount,
@@ -288,7 +490,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
         isRouteLoading: true,
       });
 
-      if (!walletAddress) {
+      if (!evmWalletAddress) {
         toast.error("Please connect wallet to proceed");
         return;
       }
@@ -296,15 +498,22 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       const getBestRoutePayload: GetBestRouteRequest = {
         fromChain,
         toChain,
-        fromToken: fromTokenAddress.toLowerCase(),
-        toToken: toTokenAddress.toLowerCase(),
+        fromToken: isFromChainSolana
+          ? fromTokenAddress
+          : fromTokenAddress.toLowerCase(),
+        toToken: isToChainSolana
+          ? toTokenAddress
+          : toTokenAddress.toLowerCase(),
         fromAmount,
-        fromUserWalletAddress: walletAddress,
-        toUserWalletAddress: walletAddress,
+        fromUserWalletAddress,
+        toUserWalletAddress,
       };
 
       // Step 2: Call getBestRoute
-      const routeRes = await getBestRoute(getBestRoutePayload);
+      const routeRes = await getBestRoute(
+        this.state.environment,
+        getBestRoutePayload
+      );
       console.dir({ routeRes });
       if (!routeRes.outputAmount) {
         toast.error("Failed to get route output amount");
@@ -341,7 +550,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
 
   handleAccept = async () => {
     const { fromChain, toChain, routeOutputAmount, routeResponse } = this.state;
-    const { walletAddress } = this.context;
+    const { evmWalletAddress, solanaWalletAddress } = this.context;
 
     if (
       !routeOutputAmount ||
@@ -354,43 +563,113 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       return;
     }
 
-    const fromChainId = fromChain.split(":")[1];
-    const toChainId = toChain.split(":")[1];
-
-    const isCrossChain = fromChainId !== toChainId;
-
-    if (isCrossChain && routeResponse.permitDataToSign && walletAddress) {
-      try {
-        const permitData = JSON.parse(routeResponse.permitDataToSign as string);
-
-        const signature = await window.ethereum.request({
-          method: "eth_signTypedData_v4",
-          params: [walletAddress, JSON.stringify(permitData)],
-        });
-
-        this.setState({
-          currentAction: "generate_call_data",
-          permitSignature: signature,
-          permitData: permitData,
-        });
-      } catch (err) {
-        console.error("Permit signature failed:", err);
-        toast.error("Failed to sign permit");
-        this.setState({ currentAction: "idle" });
+    // check if the from chain is evm
+    if (fromChain.startsWith("eip155")) {
+      console.log("EVM chain selected");
+      if (!evmWalletAddress) {
+        toast.error("Please connect EVM wallet to proceed");
+        return;
       }
-    } else if (isCrossChain) {
-      this.setState({ currentAction: "generate_call_data" });
-    } else {
-      // Same chain → check for approval
-      const steps = routeResponse.steps || [];
-      if (
-        steps.length > 0 &&
-        steps[0].metadata?.transactionType === "approval"
-      ) {
-        this.setState({ currentAction: "approve" });
+      const metamask = this.getMetamaskProvider(window.ethereum);
+
+      if (!metamask || !metamask.request) {
+        toast.error("MetaMask not found");
+        return;
+      }
+
+      const fromChainId = fromChain.split(":")[1];
+      const toChainId = toChain.split(":")[1];
+
+      const isCrossChain = fromChainId !== toChainId;
+
+      console.log("isCrossChain: ", isCrossChain);
+
+      if (isCrossChain && routeResponse.permitDataToSign && evmWalletAddress) {
+        try {
+          const permitData = JSON.parse(
+            routeResponse.permitDataToSign as string
+          );
+
+          console.log("requesting permit signature: ", {
+            data: JSON.stringify(permitData, null, 2),
+            wallet: evmWalletAddress,
+          });
+
+          const signature = await metamask.request({
+            method: "eth_signTypedData_v4",
+            params: [evmWalletAddress, JSON.stringify(permitData)],
+          });
+
+          console.log("Permit signature: ", signature);
+
+          this.setState({
+            currentAction: "generate_call_data",
+            permitSignature: signature,
+            permitData: permitData,
+          });
+        } catch (err) {
+          console.error("Permit signature failed:", err);
+          toast.error("Failed to sign permit");
+          this.setState({ currentAction: "idle" });
+        }
+      } else if (isCrossChain) {
+        // check if to chain is solana. This is currently not supported
+        if (toChain.startsWith("solana")) {
+          toast.error("Cross-chain swaps to Solana are not supported yet");
+          return;
+        }
+
+        this.setState({ currentAction: "generate_call_data" });
       } else {
-        this.setState({ currentAction: "swap" });
+        // Same chain → check for approval
+        const steps = routeResponse.steps || [];
+        if (
+          steps.length > 0 &&
+          steps[0].metadata?.transactionType === "approval"
+        ) {
+          this.setState({ currentAction: "approve" });
+        } else {
+          this.setState({ currentAction: "swap" });
+        }
       }
+    } else if (fromChain.startsWith("solana")) {
+      console.log("Solana chain selected");
+      if (!solanaWalletAddress) {
+        toast.error("Please connect Solana wallet to proceed");
+        return;
+      }
+      const fromChainId = fromChain.split(":")[1];
+      const toChainId = toChain.split(":")[1];
+
+      const isCrossChain = fromChainId !== toChainId;
+
+      if (isCrossChain) {
+        toast.error("Cross-chain swaps from Solana are not supported yet");
+      } else {
+        // Same chain -> log response for now
+        console.log("Route response:", routeResponse);
+
+        if (
+          !routeResponse.steps ||
+          routeResponse.steps.length === 0 ||
+          !routeResponse.steps[0].txnData
+        ) {
+          toast.error("No steps found in route response");
+          return;
+        }
+
+        const solanaTxId = await submitPhantomSolanaTransaction(
+          routeResponse.steps[0].txnData as SolanaTxPayload
+        );
+
+        console.dir({
+          solanaTxId,
+          routeResponse,
+        });
+      }
+    } else {
+      toast.error("Unsupported chain type");
+      return;
     }
   };
 
@@ -406,13 +685,13 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       permitData,
       routeOutputAmount,
     } = this.state;
-    const { walletAddress } = this.context;
+    const { evmWalletAddress } = this.context;
 
     if (
       !routeResponse ||
       !fromToken ||
       !toToken ||
-      !walletAddress ||
+      !evmWalletAddress ||
       !amount ||
       !window.ethereum
     ) {
@@ -420,7 +699,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
         routeResponse,
         fromToken,
         toToken,
-        walletAddress,
+        evmWalletAddress,
         amount,
       });
       toast.error("Missing required data to generate call data.");
@@ -444,13 +723,16 @@ class TradePage extends Component<TradePageProps, TradePageState> {
           )
           .toString(),
         slippage: "0.5",
-        fromUserWalletAddress: walletAddress,
-        toUserWalletAddress: walletAddress,
+        fromUserWalletAddress: evmWalletAddress,
+        toUserWalletAddress: evmWalletAddress,
         permitSignature: permitSignature ?? undefined,
         permitData: permitData ? JSON.stringify(permitData) : undefined,
       };
 
-      const callDataResponse = await getCallData(payload);
+      const callDataResponse = await getCallData(
+        this.state.environment,
+        payload
+      );
 
       this.setState({ callDataResponse });
 
@@ -496,13 +778,13 @@ class TradePage extends Component<TradePageProps, TradePageState> {
 
   submitTransactionByType = async (type: "approval" | "dex") => {
     const { routeResponse, callDataResponse } = this.state;
-    const { walletAddress } = this.context;
+    const { evmWalletAddress } = this.context;
 
     const responseToUse = callDataResponse ? callDataResponse : routeResponse;
 
     if (
       !responseToUse ||
-      !walletAddress ||
+      !evmWalletAddress ||
       !responseToUse.steps ||
       responseToUse.steps.length === 0 ||
       !window.ethereum
@@ -528,8 +810,10 @@ class TradePage extends Component<TradePageProps, TradePageState> {
     try {
       this.setState({ isTxSubmitting: true });
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner(walletAddress);
+      const metamask = this.getMetamaskProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider(metamask);
+
+      const signer = await provider.getSigner(evmWalletAddress);
 
       const txRequest: any = step.txnData;
       const tx = await signer.sendTransaction({
@@ -591,10 +875,10 @@ class TradePage extends Component<TradePageProps, TradePageState> {
 
   handleInitBridgeTxn = async () => {
     const { callDataResponse } = this.state;
-    const { walletAddress } = this.context;
+    const { evmWalletAddress } = this.context;
 
     if (
-      !walletAddress ||
+      !evmWalletAddress ||
       !callDataResponse ||
       !callDataResponse.steps ||
       !window.ethereum
@@ -618,8 +902,10 @@ class TradePage extends Component<TradePageProps, TradePageState> {
     try {
       this.setState({ isTxSubmitting: true });
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner(walletAddress);
+      const metamask = this.getMetamaskProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider(metamask);
+
+      const signer = await provider.getSigner(evmWalletAddress);
 
       const txRequest = step.txnData as any;
       const tx = await signer.sendTransaction({
@@ -646,11 +932,16 @@ class TradePage extends Component<TradePageProps, TradePageState> {
 
   handleRegisterIntent = async () => {
     const { callDataResponse, fromChain } = this.state;
-    const { walletAddress } = this.context;
+    const { evmWalletAddress } = this.context;
 
-    if (!walletAddress || !callDataResponse || !window.ethereum || !fromChain) {
+    if (
+      !evmWalletAddress ||
+      !callDataResponse ||
+      !window.ethereum ||
+      !fromChain
+    ) {
       console.dir({
-        walletAddress,
+        evmWalletAddress,
         callDataResponse,
         window,
         fromChain,
@@ -672,9 +963,11 @@ class TradePage extends Component<TradePageProps, TradePageState> {
 
       const parsedData = JSON.parse(orderTypedData as string);
 
-      const signature = await window.ethereum.request({
+      const metamask = this.getMetamaskProvider(window.ethereum);
+
+      const signature = await metamask.request({
         method: "eth_signTypedData_v4",
-        params: [walletAddress, JSON.stringify(parsedData)],
+        params: [evmWalletAddress, JSON.stringify(parsedData)],
       });
 
       const crossChainOrderStep = callDataResponse.steps?.find(
@@ -690,7 +983,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
         return;
       }
 
-      const intentRes = await registerIntent({
+      const intentRes = await registerIntent(this.state.environment, {
         orderBytes: intentCalldata,
         orderBytesSignature: signature,
         caipId: fromChain,
@@ -710,8 +1003,15 @@ class TradePage extends Component<TradePageProps, TradePageState> {
   };
 
   render() {
-    const { walletAddress, chainId, isConnected, isWalletContextReady } =
-      this.context;
+    const {
+      evmWalletAddress,
+      evmChainId,
+      isEvmConnected,
+      solanaWalletAddress,
+      solanaNetwork,
+      isSolanaConnected,
+      isWalletContextReady,
+    } = this.context;
     const {
       fromChain,
       toChain,
@@ -721,6 +1021,7 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       balance,
       isQuoteLoading,
       isRouteLoading,
+      balanceLoading,
       quoteOutputAmount,
       routeOutputAmount,
       currentAction,
@@ -729,13 +1030,29 @@ class TradePage extends Component<TradePageProps, TradePageState> {
     } = this.state;
 
     if (!isWalletContextReady) return null;
-    if (!isConnected) return <Navigate to="/" replace />;
+    if (!(isEvmConnected || isSolanaConnected))
+      return <Navigate to="/" replace />;
 
     const isDisabled =
       isQuoteLoading ||
       isRouteLoading ||
+      switchingChain ||
+      !fromChain ||
+      !toChain ||
+      !fromToken ||
+      !toToken ||
+      !amount ||
+      (balance && parseFloat(amount) > parseFloat(balance)) ||
       currentAction === "get_quote" ||
       isTxSubmitting;
+
+    const isLoading =
+      switchingChain ||
+      isQuoteLoading ||
+      isRouteLoading ||
+      isTxSubmitting ||
+      balanceLoading ||
+      !isWalletContextReady;
 
     const outputAmount = routeOutputAmount || quoteOutputAmount;
 
@@ -750,6 +1067,13 @@ class TradePage extends Component<TradePageProps, TradePageState> {
       register_intent: "Sign Cross Chain Order",
     }[currentAction];
 
+    // 🚨 IMPORTANT: Determine if forced USDC is needed
+    const forceUSDC =
+      FEATURE_ENABLE_SOLANA_EVM_CROSS_CHAIN &&
+      fromChain.startsWith("solana") &&
+      toChain &&
+      !toChain.startsWith("solana");
+
     return (
       <div style={styles.container}>
         <div style={styles.contentWrapper}>
@@ -758,9 +1082,29 @@ class TradePage extends Component<TradePageProps, TradePageState> {
           </Link>
 
           <h1 style={styles.title}>Trade Service Client App</h1>
-          <p style={styles.description}>Swap tokens across EVM chains.</p>
+          <p style={styles.description}>Swap tokens across EVM and Solana.</p>
 
-          <WalletInfoCard walletAddress={walletAddress} chainId={chainId} />
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Environment</label>
+            <select
+              style={styles.select}
+              value={this.state.environment}
+              onChange={(e) => this.setState({ environment: e.target.value })}
+            >
+              <option value="staging">Staging</option>
+              <option value="sandbox">Sandbox</option>
+              <option value="production">Production</option>
+            </select>
+          </div>
+
+          <WalletInfoCard
+            evmWalletAddress={evmWalletAddress}
+            evmChainId={evmChainId}
+            isEvmConnected={isEvmConnected}
+            solanaWalletAddress={solanaWalletAddress}
+            solanaNetwork={solanaNetwork}
+            isSolanaConnected={isSolanaConnected}
+          />
           {switchingChain && (
             <p style={{ color: "#ffcc00", marginBottom: "1rem" }}>
               Switching network...
@@ -788,25 +1132,45 @@ class TradePage extends Component<TradePageProps, TradePageState> {
               }
             }}
           >
+            {/* FROM CHAIN */}
             <ChainSelect
               label="From Chain"
               value={fromChain}
               disabled={switchingChain}
-              onChange={(chainId) => {
-                this.setState({ fromChain: chainId });
-                this.switchChain(chainId);
-                this.resetTradeState();
-              }}
+              allowedChains={Object.keys(CAIP_TO_NAME)}
+              onChange={(chainId) => this.handleFromChainChange(chainId)}
             />
 
+            {/* FROM TOKEN */}
             <TokenInput
               chainId={fromChain}
               label="From Token"
+              forceToken={
+                forceUSDC
+                  ? {
+                      address: SOLANA_USDC.address,
+                      symbol: SOLANA_USDC.symbol,
+                      decimals: SOLANA_USDC.decimals,
+                    }
+                  : undefined
+              }
+              disabled={switchingChain}
               onValidToken={(address, symbol, decimals, isNative) => {
-                this.resetTradeState();
-                this.setState({
-                  fromToken: { address, symbol, decimals, isNative },
+                console.log("Selected from token:", {
+                  address,
+                  symbol,
+                  decimals,
+                  isNative,
                 });
+                this.resetTradeState();
+                this.setState(
+                  {
+                    fromToken: { address, symbol, decimals, isNative },
+                  },
+                  () => {
+                    this.fetchBalance();
+                  }
+                );
               }}
             />
 
@@ -821,15 +1185,27 @@ class TradePage extends Component<TradePageProps, TradePageState> {
               balance={balance}
             />
 
+            {/* TO CHAIN */}
             <ChainSelect
               label="To Chain"
               value={toChain}
+              disabled={switchingChain}
+              allowedChains={this.getAllowedToChains()}
               onChange={(chainId) => {
-                this.resetTradeState();
-                this.setState({ toChain: chainId });
+                this.setState({
+                  toChain: chainId,
+                  toToken: null, // 🔥 RESET TO TOKEN
+                  quoteOutputAmount: null,
+                  routeOutputAmount: null,
+                  isQuoteLoading: false,
+                  isRouteLoading: false,
+                  currentAction: "idle",
+                  routeResponse: null,
+                });
               }}
             />
 
+            {/* TO TOKEN */}
             <TokenInput
               chainId={toChain}
               label="To Token"
@@ -851,17 +1227,58 @@ class TradePage extends Component<TradePageProps, TradePageState> {
               </p>
             )}
 
-            <button
-              type="submit"
-              style={{
-                ...styles.submitButton,
-                ...(isDisabled ? styles.submitButtonDisabled : {}),
-              }}
-              disabled={isDisabled}
-            >
-              {actionLabel}
-            </button>
+            <div>
+              <button
+                type="submit"
+                style={{
+                  ...styles.submitButton,
+                  ...(isDisabled ? styles.submitButtonDisabled : {}),
+                }}
+                disabled={isDisabled}
+              >
+                {actionLabel}
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.submitButton,
+                  ...(isDisabled ? styles.submitButtonDisabled : {}),
+                  marginLeft: "1.5rem",
+                }}
+                disabled={isLoading}
+                onClick={() => this.handleClearForm()}
+              >
+                Clear Form
+              </button>
+            </div>
           </form>
+          {isLoading && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.6)",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                zIndex: 10,
+                borderRadius: "0.5rem",
+                width: "100%",
+                height: "100%",
+              }}
+            >
+              <div className="loader" />
+              <span
+                style={{ color: "#fff", marginLeft: "1rem", height: "100%" }}
+              >
+                Loading...
+              </span>
+            </div>
+          )}
         </div>
       </div>
     );

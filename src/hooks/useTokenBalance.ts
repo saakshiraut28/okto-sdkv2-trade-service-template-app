@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { TokenInfo } from "../utils/chainHelpers";
+import { toast } from "react-toastify";
 
 export function useTokenBalance(
   token: TokenInfo | null,
@@ -13,17 +14,25 @@ export function useTokenBalance(
     const fetch = async () => {
       if (!token || !walletAddress || !chainId) return;
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const eth = window.ethereum as any;
+      const metamask = eth.providers
+        ? eth.providers.find((p: any) => p.isMetaMask)
+        : eth;
+
+      if (!metamask || !metamask.request) {
+        toast.error("MetaMask not found");
+        return;
+      }
 
       try {
         if (token.isNative) {
-          const bal = await provider.getBalance(walletAddress);
+          const bal = await metamask.getBalance(walletAddress);
           setBalance(ethers.formatUnits(bal, token.decimals));
         } else {
           const contract = new ethers.Contract(
             token.address,
             ["function balanceOf(address owner) view returns (uint256)"],
-            provider
+            metamask
           );
           const bal = await contract.balanceOf(walletAddress);
           setBalance(ethers.formatUnits(bal, token.decimals));

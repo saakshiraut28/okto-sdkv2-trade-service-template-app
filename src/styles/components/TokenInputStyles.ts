@@ -11,6 +11,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: "4px",
     fontSize: "12px",
     cursor: "pointer",
+    marginRight: "4px",
   },
 };
 
