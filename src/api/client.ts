@@ -15,11 +15,8 @@ export const tradeServiceStagingClient = axios.create({
 });
 
 export const tradeServiceSandboxClient = axios.create({
-  baseURL: "https://sandbox-okto-trade-service-kong.oktostage.com/v1",
+  baseURL: "/trade-sandbox-api-proxy",
   timeout: 30000,
-  headers: {
-    "X-Api-Key": TRADE_SANDBOX_API_KEY,
-  },
 });
 
 export const tradeServiceProductionClient = axios.create({
@@ -29,3 +26,4 @@ export const tradeServiceProductionClient = axios.create({
     "X-Api-Key": TRADE_PRODUCTION_API_KEY,
   },
 });
+

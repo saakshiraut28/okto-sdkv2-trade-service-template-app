@@ -131,38 +131,24 @@ class TokenInput extends Component<Props, State> {
       : tokenAddress;
 
     return (
-      <div style={{ marginBottom: "1.5rem" }}>
+      <div className="mb-6">
         <label
-          style={{
-            display: "block",
-            fontWeight: "bold",
-            marginBottom: "0.5rem",
-          }}
+          className="block text-sm font-semibold text-gray-300 mb-2"
         >
           {label}
         </label>
-        <div style={{ position: "relative" }}>
+        <div className="relative">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => this.handleAddressChange(e.target.value)}
             placeholder="Token address"
             disabled={disabled || !!forceToken}
-            style={{
-              width: "100%",
-              padding: "0.5rem",
-              borderRadius: "0.5rem",
-              border: "1px solid #ccc",
-              fontSize: "1rem",
-            }}
+            className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           />
           {this.state.tokenSymbol && (
             <p
-              style={{
-                fontSize: "0.9rem",
-                marginTop: "0.25rem",
-                color: "#00ff99",
-              }}
+              className="text-sm text-emerald-400 mt-1"
             >
               Selected Token: <strong>{this.state.tokenSymbol}</strong>
             </p>
@@ -170,14 +156,14 @@ class TokenInput extends Component<Props, State> {
         </div>
         {/* Quick select buttons */}
         {chainId && !forceToken && (
-          <div style={{ marginTop: "0.5rem" }}>
+          <div className="mt-2 flex flex-wrap gap-2">
             {Object.keys(
               CHAIN_ID_TO_KNOWN_TOKENS[chainId.split(":")[1]] || {}
             ).map((symbol) => (
               <button
                 key={symbol}
                 type="button"
-                style={{ marginRight: "0.5rem", borderColor: "white" }}
+                className="text-sm border border-white text-white px-3 py-1 rounded-md hover:bg-gray-700 transition"
                 onClick={() => this.handleQuickSelect(symbol)}
               >
                 {symbol}
@@ -185,7 +171,7 @@ class TokenInput extends Component<Props, State> {
             ))}
             <button
               type="button"
-              style={{ marginRight: "0.5rem", borderColor: "white" }}
+              className="text-sm border border-white text-white px-3 py-1 rounded-md hover:bg-gray-700 transition"
               onClick={() => this.handleQuickSelect("NATIVE")}
             >
               Native Token
@@ -195,7 +181,7 @@ class TokenInput extends Component<Props, State> {
 
         {/* Show forced token info if applicable */}
         {forceToken && (
-          <p style={{ fontSize: "0.9rem", color: "#aaa" }}>
+          <p className="text-sm text-gray-400 mt-1">
             Token locked: {forceToken.symbol} (
             {forceToken.isNative ? "native" : forceToken.address})
           </p>

@@ -20,19 +20,14 @@ const AmountInput: FC<AmountInputProps> = ({
   return (
     <div style={{ marginBottom: "1.5rem" }}>
       <label
-        style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
+        className="block font-semibold mb-2 text-sm text-gray-300"
       >
         Amount
       </label>
       <div style={{ display: "flex", gap: "0.5rem" }}>
         <input
           type="number"
-          style={{
-            flex: 1,
-            padding: "0.5rem",
-            fontSize: "1rem",
-            borderRadius: "0.5rem",
-          }}
+          className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           placeholder="Enter amount"
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -41,12 +36,7 @@ const AmountInput: FC<AmountInputProps> = ({
         {onMaxClick && (
           <button
             type="button"
-            style={{
-              padding: "0.5rem 1rem",
-              fontSize: "0.9rem",
-              borderRadius: "0.5rem",
-              cursor: "pointer",
-            }}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
             onClick={onMaxClick}
             disabled={disabled || !balance}
           >
