@@ -44,11 +44,6 @@ const AmountInput: FC<AmountInputProps> = ({
           </button>
         )}
       </div>
-      {balance && tokenSymbol && (
-        <p style={{ fontSize: "0.9rem", color: "#aaa", marginTop: "0.5rem" }}>
-          Balance: {balance} {tokenSymbol}
-        </p>
-      )}
     </div>
   );
 };

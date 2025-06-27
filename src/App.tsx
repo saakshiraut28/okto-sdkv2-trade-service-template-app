@@ -14,6 +14,8 @@ import {
   handleChainChanged,
 } from "./utils/evmWallet";
 import { WalletContext } from "./context/WalletContext";
+import SameChainTradePage from "./pages/SameChainTradePage";
+import CrossChainTradePage from "./pages/CrossChainTradePage";
 
 function App() {
   const { evmWalletAddress, evmChainId, isEvmConnected, setWalletState } =
@@ -44,8 +46,10 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<TradePage />} />
       <Route path="/trade" element={<TradePage />} />
+      <Route path="/same-chain" element={<SameChainTradePage />} />
+      <Route path="/cross-chain" element={<CrossChainTradePage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

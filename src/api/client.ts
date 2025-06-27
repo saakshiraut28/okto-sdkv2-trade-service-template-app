@@ -27,3 +27,11 @@ export const tradeServiceProductionClient = axios.create({
   },
 });
 
+tradeServiceSandboxClient.interceptors.request.use((config) => {
+  const storedSecret = localStorage.getItem("TRADE_SERVICE_SECRET");
+  const defaultSecret = import.meta.env.VITE_TRADE_SERVICE_SANDBOX_API_KEY;
+
+  config.headers["X-Api-Key"] = storedSecret || defaultSecret;
+
+  return config;
+});
