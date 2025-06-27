@@ -398,6 +398,8 @@ function SameChainTradePage() {
         data: txRequest.data,
         value: txRequest.value ? BigInt(txRequest.value) : undefined,
         gas: txRequest.gasLimit ? BigInt(txRequest.gasLimit) : undefined,
+        kzg: undefined,
+        chain: undefined,
       });
 
       toast.info(`${type} transaction submitted: ${hash}`);

@@ -6,6 +6,7 @@ interface RequestResponseModalProps {
   onClose: () => void;
   title: string;
   subtitle: string;
+  payload?: any;
   requestPayload?: any;
   responsePayload?: any;
   isRequest?: boolean;
@@ -24,6 +25,7 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
   onClose,
   title,
   subtitle,
+  payload,
   requestPayload,
   responsePayload,
   isRequest = false,
