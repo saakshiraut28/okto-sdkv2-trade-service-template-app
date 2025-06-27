@@ -27,11 +27,15 @@ const AmountInput: FC<AmountInputProps> = ({
       <div style={{ display: "flex", gap: "0.5rem" }}>
         <input
           type="number"
+          inputMode="decimal"
           className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           placeholder="Enter amount"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          onWheel={(e) => {
+            (e.target as HTMLInputElement).blur();
+          }}
         />
         {onMaxClick && (
           <button

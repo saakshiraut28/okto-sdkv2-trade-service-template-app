@@ -58,7 +58,6 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
 
   if (!open) return null;
 
-  // Show side by side when both request and response are available
   const showSideBySide = requestPayload && responsePayload;
 
   return (
@@ -136,12 +135,20 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
 
         <div className="flex justify-end mt-6 gap-2">
           {isRequest ? (
-            <button
-              onClick={handleConfirm}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              Send Request
-            </button>
+            <>
+              <button
+                onClick={handleConfirm}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Send Request
+              </button>
+              <button
+                onClick={onClose}
+                className="bg-gray-300 dark:bg-red-700 text-black dark:text-white px-4 py-2 rounded hover:bg-gray-400 dark:hover:bg-gray-600"
+              >
+                Close
+              </button>
+            </>
           ) : (
             <button
               onClick={onClose}

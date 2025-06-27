@@ -9,6 +9,7 @@ import {
   useWalletClient
 } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import SameChainFlow from '../assets/same-chain-swaps-flow.png';
 
 // Import your existing components
 import TokenInput from "../components/TokenInput";
@@ -464,18 +465,19 @@ function SameChainTradePage() {
   const actionLabel = {
     approve: "Approve Token",
     swap: "Execute Swap",
-    idle: "Get Quote",
+    idle: "Get Best Route",
     get_best_route: "Get Best Route",
     get_quote: "Getting Quote..",
   }[state.currentAction];
 
   return (
     <div className="my-4">
-
-      <p className="text-sm border border-gray-400 p-2 my-2">ℹ️ For more information on chains and tokens; check <a className="text-indigo-400" href="https://docs.okto.tech/docs/trade-service/supported-networks-tokens" target="_blank">Supported Chains and Tokens</a></p>
-
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-1">Chain</label>
+        <label className="block text-sm font-medium mb-1">Chain:{" "}
+          <span className="text-md text-gray-200 font-normal">
+            Trade Service only works on mainnet. For more information on chains and tokens supported by Okto Trade Service; check <a className="text-indigo-400" href="https://docs.okto.tech/docs/trade-service/supported-networks-tokens" target="_blank">Supported Chains and Tokens</a>
+          </span>
+        </label>
         <select
           className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
           value={state.chainId}
@@ -522,7 +524,7 @@ function SameChainTradePage() {
             handleGetBestRoute();
           } else if (state.currentAction === "swap") {
             submitTransaction("dex");
-          } else {
+          } else if (state.currentAction === "get_quote") {
             handleGetQuote();
           }
         }}
@@ -586,7 +588,7 @@ function SameChainTradePage() {
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Recipient Wallet Address{" "}
-            <span className="text-xs text-indigo-400 font-normal">
+            <span className="text-sm text-gray-200 font-normal">
               (Optional — defaults to your connected address)
             </span>
           </label>
@@ -610,17 +612,53 @@ function SameChainTradePage() {
           </div>
         )}
 
+        <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200">
+          <h1 className="font-semibold mb-1">ℹ️ Understanding Get Quote & Get Best Route</h1>
+          <p>
+            → Using <strong>Get Quote</strong> is optional. It provides a faster API call to quickly estimate the output amount for your trade.
+            <br />
+            → <strong>Get Best Route</strong>, however, is mandatory for executing trades. It returns the optimal route along with all the steps required to complete the trade.
+            <br />
+            → Read the <a className="text-indigo-400" href="https://docsv2.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
+          </p>
+          <br />
+          <span>Here's the diagram explaining the <strong>Same Chain Swap Flow using Okto Trade Service:</strong></span>
+          <img src={SameChainFlow} />
+        </div>
+
         <div className="flex gap-4">
+          {/* Get Quote Button */}
+          <button
+            type="button"
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.quoteOutputAmount
+              ? "bg-gray-600 hover:bg-gray-700"
+              : isDisabled
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
+              }`}
+            disabled={isDisabled}
+            onClick={() => {
+              handleGetQuote();
+            }}
+          >
+            {state.isTxSubmitting && state.currentAction === "get_quote"
+              ? "Getting Quote..."
+              : state.quoteOutputAmount
+                ? "Proceed with Get Best Route →"
+                : "Get Quote"
+            }
+          </button>
+
           <button
             type="submit"
             className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
+              ? "bg-gray-600 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700"
               }`}
             disabled={isDisabled}
           >
             {state.isTxSubmitting ? "Processing..." : actionLabel}
-          </button>
+          </button>   
 
           <button
             type="button"

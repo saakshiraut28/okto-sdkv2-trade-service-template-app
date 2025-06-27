@@ -154,8 +154,8 @@ class TokenInput extends Component<Props, State> {
             </p>
           )}
         </div>
-        <span className="text-md text-gray-400 font-normal">
-          (For demonstration purposes, we have hardcoded token addresses on these chains. In practice, the trade service can be used with any available token on that chain.)
+        <span className="text-sm text-gray-200 font-normal">
+          For demonstration purposes and easy select, we have provided these token buttons. In practice, you can enter the token address of any token available on selected chain.
         </span>
         {/* Quick select buttons */}
         {chainId && !forceToken && (

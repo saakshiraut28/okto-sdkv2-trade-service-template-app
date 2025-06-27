@@ -36,18 +36,6 @@ function TradePage() {
           <TradeServiceSecret />
         </div>
 
-        <p className="text-sm font-semibold border border-gray-400 p-2 my-3 text-gray-300 text-center rounded-full bg-gray-600">
-          ℹ️ For a detailed explanation of how same-chain and cross-chain swaps work using the Okto Trade Service API, refer to the official guide:&nbsp;
-          <a
-            className="text-indigo-400 underline"
-            href="https://docs.okto.tech/docs/trade-service"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Trade Service Setup
-          </a>
-        </p>
-
         <div className="flex w-full justify-center items-center mt-4">
           <div className="flex gap-2 bg-gray-800 rounded-full w-fit">
             <button
