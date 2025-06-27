@@ -14,9 +14,9 @@ interface Props {
   evmChainId: number | null;
   isEvmConnected: boolean;
 
-  solanaWalletAddress: string | null;
-  solanaNetwork: "mainnet" | "devnet" | "testnet" | null;
-  isSolanaConnected: boolean;
+  // solanaWalletAddress: string | null;
+  // solanaNetwork: "mainnet" | "devnet" | "testnet" | null;
+  // isSolanaConnected: boolean;
 }
 
 class WalletInfoCard extends Component<Props> {
@@ -28,20 +28,20 @@ class WalletInfoCard extends Component<Props> {
       evmWalletAddress,
       evmChainId,
       isEvmConnected,
-      solanaWalletAddress,
-      solanaNetwork,
-      isSolanaConnected,
+      // solanaWalletAddress,
+      // solanaNetwork,
+      // isSolanaConnected,
     } = this.props;
 
     const evmCaip = evmChainId ? `eip155:${evmChainId}` : null;
-    const solanaCaip = solanaNetwork ? `solana:${solanaNetwork}` : null;
+    // const solanaCaip = solanaNetwork ? `solana:${solanaNetwork}` : null;
 
     const evmNetworkName = evmCaip
       ? CAIP_TO_NAME[evmCaip] || evmCaip
       : "Unknown";
-    const solanaNetworkName = solanaCaip
-      ? CAIP_TO_NAME[solanaCaip] || solanaCaip
-      : "Unknown";
+    // const solanaNetworkName = solanaCaip
+    //   ? CAIP_TO_NAME[solanaCaip] || solanaCaip
+    //   : "Unknown";
 
     return (
       <div style={styles.card}>
@@ -81,7 +81,7 @@ class WalletInfoCard extends Component<Props> {
 
         <hr style={styles.hr} />
 
-        <div style={styles.walletRow}>
+        {/* <div style={styles.walletRow}>
           <label style={styles.checkboxLabel}>
             <input type="checkbox" checked={isSolanaConnected} readOnly />
             Solana Wallet Connected
@@ -116,7 +116,7 @@ class WalletInfoCard extends Component<Props> {
           ) : (
             <span style={styles.dim}>Unknown</span>
           )}
-        </p>
+        </p> */}
       </div>
     );
   }

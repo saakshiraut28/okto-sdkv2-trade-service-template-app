@@ -154,6 +154,9 @@ class TokenInput extends Component<Props, State> {
             </p>
           )}
         </div>
+        <span className="text-md text-gray-400 font-normal">
+          (For demonstration purposes, we have hardcoded token addresses on these chains. In practice, the trade service can be used with any available token on that chain.)
+        </span>
         {/* Quick select buttons */}
         {chainId && !forceToken && (
           <div className="mt-2 flex flex-wrap gap-2">
