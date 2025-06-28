@@ -11,6 +11,7 @@ import {
   useWalletClient
 } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import CrossChainFlow from "../assets/cross-chain-swaps-fst-flow.png";
 
 // Import your existing components
 import TokenInput from "../components/TokenInput";
@@ -44,17 +45,19 @@ interface CrossChainTradeState {
     isNative: boolean;
   } | null;
   amount: string;
+  toUserWalletAddress: string | null;
   quoteOutputAmount: string | null;
   routeOutputAmount: string | null;
   routeResponse: any | null;
-  currentAction: "idle" | "get_quote" | "accept" | "generate_call_data" | "init_bridge_txn" | "register_intent";
+  currentAction: "idle" | "get_quote" | "accept" | "generate_call_data" | "init_bridge_txn" | "register_intent" | "get_best_route";
   isQuoteLoading: boolean;
   isRouteLoading: boolean;
   isTxSubmitting: boolean;
   modalOpen: boolean;
   modalTitle: string;
   modalSubtitle: string;
-  modalPayload: any;
+  modalRequestPayload?: any;
+  modalResponsePayload?: any;
   isRequestModal: boolean;
   onConfirmModal?: () => void;
   permitSignature: string | null;
@@ -75,6 +78,7 @@ function CrossChainTradePage() {
     fromToken: null,
     toToken: null,
     amount: "",
+    toUserWalletAddress: "",
     quoteOutputAmount: null,
     routeOutputAmount: null,
     routeResponse: null,
@@ -85,7 +89,8 @@ function CrossChainTradePage() {
     modalOpen: false,
     modalTitle: "",
     modalSubtitle: "",
-    modalPayload: null,
+    modalRequestPayload: null,
+    modalResponsePayload: null,
     isRequestModal: true,
     permitSignature: null,
     permitData: null,
@@ -126,7 +131,8 @@ function CrossChainTradePage() {
       modalOpen: true,
       modalTitle: title,
       modalSubtitle: subtitle,
-      modalPayload: payload,
+      modalRequestPayload: payload,
+      modalResponsePayload: undefined,
       isRequestModal: true,
       onConfirmModal: onConfirm,
     }));
@@ -139,9 +145,33 @@ function CrossChainTradePage() {
         modalOpen: true,
         modalTitle: title,
         modalSubtitle: subtitle,
-        modalPayload: payload,
+        modalRequestPayload: undefined,
+        modalResponsePayload: payload,
         isRequestModal: false,
         onConfirmModal: resolve,
+      }));
+    });
+  };
+
+  const openRequestResponseModal = (
+    title: string,
+    subtitle: string,
+    requestPayload: any,
+    responsePayload: any
+  ) => {
+    return new Promise<void>((resolve) => {
+      setState(prev => ({
+        ...prev,
+        modalOpen: true,
+        modalTitle: title,
+        modalSubtitle: subtitle,
+        modalRequestPayload: requestPayload,
+        modalResponsePayload: responsePayload,
+        isRequestModal: false,
+        onConfirmModal: () => {
+          setState(prev => ({ ...prev, modalOpen: false }));
+          resolve();
+        }
       }));
     });
   };
@@ -187,7 +217,7 @@ function CrossChainTradePage() {
     }));
   };
 
-  // Get quote and route for cross-chain
+  // Get quote for cross-chain
   const handleGetQuote = async () => {
     if (!address || !state.fromChain || !state.toChain || !state.fromToken || !state.toToken || !state.amount) {
       toast.error("Please fill all required fields");
@@ -200,11 +230,12 @@ function CrossChainTradePage() {
     }
 
     try {
-      setState(prev => ({ ...prev, isQuoteLoading: true, isRouteLoading: false }));
+      setState(prev => ({ ...prev, isQuoteLoading: true }));
 
       const fromAmount = ethers.parseUnits(state.amount, state.fromToken.decimals).toString();
       const fromTokenAddress = state.fromToken.isNative ? "" : state.fromToken.address;
       const toTokenAddress = state.toToken.isNative ? "" : state.toToken.address;
+      const toUserWalletAddress = state.toUserWalletAddress || address;
 
       const quotePayload = {
         fromChain: state.fromChain,
@@ -213,13 +244,14 @@ function CrossChainTradePage() {
         toToken: toTokenAddress.toLowerCase(),
         fromAmount,
         fromUserWalletAddress: address,
-        toUserWalletAddress: address,
+        toUserWalletAddress: toUserWalletAddress,
       };
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "Cross-Chain Quote Request",
-          "Step 1: Getting cross-chain quote",
+          "1. Get Quote Request",
+          `Step 1: Get Quote Request
+          📍Note: The 'Get Quote' request is optional and provides a quick estimate of the output amount. Use this step for faster previews without executing a full route calculation.`,
           quotePayload,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
@@ -229,10 +261,13 @@ function CrossChainTradePage() {
       });
 
       const quoteRes = await getQuote(state.environment, quotePayload);
+      console.log("Get Quote Response: ", quoteRes);
 
-      await openResponseModal(
-        "Cross-Chain Quote Response",
-        "Step 1: Quote received",
+      await openRequestResponseModal(
+        "1. Get Quote Response",
+        `Step 1: Get Quote
+          📍Note: The 'Get Quote' request is optional and provides a quick estimate of the output amount. Use this step for faster previews without executing a full route calculation.`,
+        quotePayload,
         quoteRes
       );
 
@@ -245,14 +280,59 @@ function CrossChainTradePage() {
         ...prev,
         quoteOutputAmount,
         isQuoteLoading: false,
-        isRouteLoading: true,
+        currentAction: "get_best_route",
       }));
 
-      // Get best route
+      return { quoteRes, quotePayload };
+
+    } catch (err) {
+      console.error("Failed to get cross-chain quote:", err);
+      toast.error("Failed to get cross-chain quote");
+      setState(prev => ({
+        ...prev,
+        isQuoteLoading: false,
+        quoteOutputAmount: null,
+        currentAction: "idle",
+      }));
+      throw err;
+    }
+  };
+  // Get the Best Route for trade
+  const handleGetBestRoute = async () => {
+    console.log("calling getBestRoute");
+    if (!address || !state.fromChain || !state.toChain || !state.fromToken || !state.toToken || !state.amount) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
+    if (state.fromChain === state.toChain) {
+      toast.error("Please select different chains for cross-chain trading");
+      return;
+    }
+
+    try {
+      setState(prev => ({ ...prev, isRouteLoading: true }));
+
+      const fromAmount = ethers.parseUnits(state.amount, state.fromToken.decimals).toString();
+      const fromTokenAddress = state.fromToken.isNative ? "" : state.fromToken.address;
+      const toTokenAddress = state.toToken.isNative ? "" : state.toToken.address;
+      const toUserWalletAddress = state.toUserWalletAddress || address;
+
+      const quotePayload = {
+        fromChain: state.fromChain,
+        toChain: state.toChain,
+        fromToken: fromTokenAddress.toLowerCase(),
+        toToken: toTokenAddress.toLowerCase(),
+        fromAmount,
+        fromUserWalletAddress: address,
+        toUserWalletAddress: toUserWalletAddress,
+      };
+
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "Cross-Chain Route Request",
-          "Step 2: Finding best cross-chain route",
+          "2. Get Best Route Request",
+          `Step 2: Get Best Route Request  
+        📍 This response provides the most optimized route for your swap, along with the exact steps required to execute the trade across the involved chains and protocols.`,
           quotePayload,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
@@ -263,9 +343,11 @@ function CrossChainTradePage() {
 
       const routeRes = await getBestRoute(state.environment, quotePayload);
 
-      await openResponseModal(
-        "Cross-Chain Route Response",
-        "Step 2: Best route found",
+      await openRequestResponseModal(
+        "2. Get Best Route Response",
+        `Step 2: Get Best Route  
+        📍 This response provides the most optimized route for your swap, along with the exact steps required to execute the trade across the involved chains and protocols.`,
+        quotePayload,
         routeRes
       );
 
@@ -275,6 +357,8 @@ function CrossChainTradePage() {
         state.toToken.decimals
       );
 
+      console.log("set current action state to accept");
+
       setState(prev => ({
         ...prev,
         routeOutputAmount,
@@ -283,22 +367,24 @@ function CrossChainTradePage() {
         currentAction: "accept",
       }));
 
+      return routeRes;
+
     } catch (err) {
-      console.error("Failed to get cross-chain quote/route:", err);
-      toast.error("Failed to get cross-chain quote or route");
+      console.error("Failed to get best route:", err);
+      toast.error("Failed to get best route");
       setState(prev => ({
         ...prev,
-        isQuoteLoading: false,
         isRouteLoading: false,
-        quoteOutputAmount: null,
         routeOutputAmount: null,
         currentAction: "idle",
       }));
+      throw err;
     }
   };
 
   // Accept cross-chain trade
   const handleAccept = async () => {
+    console.log("Accept called ")
     if (!state.routeResponse || !address || !walletClient) {
       toast.error("Missing required data for accepting trade");
       return;
@@ -314,6 +400,7 @@ function CrossChainTradePage() {
           ...permitData,
         });
 
+        console.log("After Permit signature set the current Action state to generate_call_data");
         setState(prev => ({
           ...prev,
           currentAction: "generate_call_data",
@@ -321,6 +408,7 @@ function CrossChainTradePage() {
           permitData: permitData,
         }));
       } else {
+        console.log("without Permit signature set the current Action state to generate_call_data");
         setState(prev => ({ ...prev, currentAction: "generate_call_data" }));
       }
     } catch (err) {
@@ -332,6 +420,7 @@ function CrossChainTradePage() {
 
   // Generate call data
   const handleGenerateCallData = async () => {
+    console.log("Generate Call Data called");
     if (!state.routeResponse || !address) {
       toast.error("Missing route data");
       return;
@@ -360,8 +449,9 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "Generate Call Data Request",
-          "Step 3: Generating transaction call data",
+          "3. Generate Call Data Request",
+          `Step 3: Generating transaction call data
+        📍 This generates the call data for trade.`,
           callDataPayload,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
@@ -369,15 +459,19 @@ function CrossChainTradePage() {
           }
         );
       });
+
       // @ts-ignore
       const callDataRes = await getCallData(state.environment, callDataPayload);
       setState(prev => ({ ...prev, callDataResponse: callDataRes }));
 
-      await openResponseModal(
-        "Generate Call Data Response",
-        "Step 3: Call data generated",
+      await openRequestResponseModal(
+        "3. Generate Call Data Response",
+        `Step 2: Generate the Call data response
+        📍 This response provides generated call data for cross chain trade.`,
+        callDataPayload,
         callDataRes
       );
+
 
       const nextBridgeStep = callDataRes?.steps?.find(
         (s) =>
@@ -393,8 +487,10 @@ function CrossChainTradePage() {
       const { transactionType } = nextBridgeStep?.metadata ?? {};
 
       if (transactionType === "init") {
+        console.log("after call data if txn type is 'init' set current action state to init_bridge_txn");
         setState(prev => ({ ...prev, currentAction: "init_bridge_txn" }));
       } else if (!transactionType) {
+        console.log("after call data if txn type is not available set current action state to register_intent");
         setState(prev => ({ ...prev, currentAction: "register_intent" }));
       } else {
         toast.error("Unknown bridge transaction type");
@@ -409,6 +505,7 @@ function CrossChainTradePage() {
 
   // Initialize bridge transaction
   const handleInitBridgeTransaction = async () => {
+    console.log("Init Bridge Transaction called");
     const responseToUse = state.callDataResponse;
 
     if (!responseToUse || !address || !walletClient) {
@@ -434,11 +531,12 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "Bridge Transaction Request",
-          "Step 4: Initiating cross-chain bridge",
+          "4. Calling Bridge Transaction",
+          `Step 4: Generating transaction call data
+        📍 This generates the call data for bridge transaction.`,
           txRequest,
           async () => {
-            setState((prev) => ({ ...prev, modalOpen: false }));
+            setState(prev => ({ ...prev, modalOpen: false }));
             resolve();
           }
         );
@@ -460,9 +558,10 @@ function CrossChainTradePage() {
 
       await openResponseModal(
         "Bridge Transaction Complete",
-        "Step 4: Bridge transaction confirmed",
+        "Save the txn receipt",
         receipt
       );
+      console.log("End of the flow init_bridge_txn flow");
 
       toast.success("Bridge transaction confirmed");
 
@@ -477,7 +576,8 @@ function CrossChainTradePage() {
 
   // Register intent (final step)
   const handleRegisterIntent = async () => {
-    const responseToUse = state.callDataResponse
+    console.log("Register Intent called");
+    const responseToUse = state.callDataResponse;
     console.log("CALLDATA RES: ", responseToUse)
     if (!responseToUse || !address) {
       toast.error("Missing route data for intent registration");
@@ -609,45 +709,36 @@ function CrossChainTradePage() {
     accept: "Accept Cross-Chain Trade",
     generate_call_data: "Generate Call Data",
     init_bridge_txn: "Initialize Bridge",
-    register_intent: "Complete Trade",
-    idle: "Get Quote",
+    register_intent: "Register Intent",
+    get_best_route: "Get Best Route",
+    idle: "Get Best Route",
     get_quote: "Getting Quote...",
   }[state.currentAction];
 
   return (
-   <div className="my-4">
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-1">Environment</label>
-          <select
-            className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
-            value={state.environment}
-            onChange={(e) => setState(prev => ({ ...prev, environment: e.target.value }))}
-          >
-            <option value="staging">Staging</option>
-            <option value="sandbox">Sandbox</option>
-            <option value="production">Production</option>
-          </select>
-        </div>
+    <div className="my-4">
 
         <RequestResponseModal
-          open={state.modalOpen}
-          onClose={() => {
-            setState(prev => ({ ...prev, modalOpen: false }));
-            if (state.onConfirmModal) {
-              state.onConfirmModal();
-              setState(prev => ({ ...prev, onConfirmModal: undefined }));
-            }
-          }}
-          title={state.modalTitle}
-          subtitle={state.modalSubtitle}
-          payload={state.modalPayload}
-          isRequest={state.isRequestModal}
-          onConfirm={
-            state.isRequestModal && state.onConfirmModal
-              ? async () => state.onConfirmModal!()
-              : undefined
+        open={state.modalOpen}
+        onClose={() => {
+          setState(prev => ({ ...prev, modalOpen: false }));
+          if (state.onConfirmModal) {
+            state.onConfirmModal();
+            setState(prev => ({ ...prev, onConfirmModal: undefined }));
           }
-        />
+        }}
+        title={state.modalTitle}
+        subtitle={state.modalSubtitle}
+        // Handle both old and new payload formats
+        requestPayload={state.modalRequestPayload || (state.isRequestModal ? state.modalRequestPayload : undefined)}
+        responsePayload={state.modalResponsePayload || (!state.isRequestModal ? state.modalResponsePayload : undefined)}
+        isRequest={state.isRequestModal}
+        onConfirm={
+          state.isRequestModal && state.onConfirmModal
+            ? async () => state.onConfirmModal!()
+            : undefined
+        }
+      />
 
         <form
           onSubmit={(e) => {
@@ -660,8 +751,10 @@ function CrossChainTradePage() {
               handleInitBridgeTransaction();
             } else if (state.currentAction === "register_intent") {
               handleRegisterIntent();
-            } else {
+            } else if (state.currentAction === "get_quote") {
               handleGetQuote();
+            } else if (state.currentAction === "get_best_route") {
+              handleGetBestRoute();
             }
           }}
           className="space-y-6"
@@ -738,7 +831,7 @@ function CrossChainTradePage() {
                 routeResponse: null,
               }));
             }}
-          />
+        />
 
           {state.fromChain === state.toChain && state.fromChain && state.toChain && (
             <div className="bg-yellow-900 border border-yellow-600 p-4 rounded-lg">
@@ -746,7 +839,39 @@ function CrossChainTradePage() {
                 ⚠️ Source and destination chains are the same. Please select different chains for cross-chain trading.
               </p>
             </div>
-          )}
+        )}
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Recipient Wallet Address{" "}
+            <span className="text-sm text-gray-200 font-normal">
+              (Optional — defaults to your connected address)
+            </span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="0x... or leave blank to use your wallet"
+              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={state.toUserWalletAddress || ""}
+              onChange={(e) => setState(prev => ({ ...prev, toUserWalletAddress: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200">
+          <h1 className="font-semibold mb-1">ℹ️ Understanding Get Quote & Get Best Route</h1>
+          <p>
+            → Using <strong>Get Quote</strong> is optional. It provides a faster API call to quickly estimate the output amount for your trade.
+            <br />
+            → <strong>Get Best Route</strong>, however, is mandatory for executing trades. It returns the optimal route along with all the steps required to complete the trade.
+            <br />
+            → Read the <a className="text-indigo-400" href="https://docsv2.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
+          </p>
+          <br />
+          <span>Here's the diagram explaining the <strong>Cross Chain Swap Flow using Okto Trade Service:</strong></span>
+          <img src={CrossChainFlow} />
+        </div>
 
           {outputAmount && state.fromChain !== state.toChain && (
             <div className="bg-gray-700 p-4 rounded-lg">
@@ -761,38 +886,79 @@ function CrossChainTradePage() {
           )}
 
           <div className="flex gap-4">
-            <button
-              type="submit"
-              className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+          <button
+            type="button"
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.quoteOutputAmount || state.routeOutputAmount
+              ? "bg-gray-600 hover:bg-gray-700"
+              : isDisabled
                 ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-                }`}
-              disabled={isDisabled}
-            >
-              {state.isTxSubmitting ? "Processing..." : actionLabel}
-            </button>
+                : "bg-green-600 hover:bg-green-700"
+              }`}
+            disabled={isDisabled}
+            onClick={() => {
+              handleGetQuote();
+            }}
+          >
+            {state.isTxSubmitting && state.currentAction === "get_quote"
+              ? "Getting Quote..."
+              : state.quoteOutputAmount || state.routeOutputAmount
+                ? "Proceed with Get Best Route →"
+                : "Get Quote"
+            }
+          </button>
+
+          <button
+            type="button"
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.routeOutputAmount
+              ? "bg-gray-600 hover:bg-gray-700"
+              : isDisabled
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
+              }`}
+            disabled={isDisabled}
+            onClick={() => {
+              handleGetBestRoute();
+            }}
+          >
+            {state.isTxSubmitting && state.currentAction === "get_best_route"
+              ? "Getting Route Info..."
+              : state.routeOutputAmount
+                ? "Proceed with Call Data →"
+                : "Get Best Route"
+            }
+          </button>
+
+          <button
+            type="submit"
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+              ? "bg-gray-600 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            disabled={isDisabled}
+          >
+            {state.isTxSubmitting ? "Processing..." : actionLabel}
+          </button>    
 
             <button
-              type="button"
-              className="px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 transition font-medium"
-              onClick={() => {
-                setState(prev => ({
-                  ...prev,
-                  fromToken: null,
-                  toToken: null,
-                  amount: "",
-                  quoteOutputAmount: null,
-                  routeOutputAmount: null,
-                  currentAction: "idle",
-                  routeResponse: null,
-                  permitSignature: null,
-                  permitData: null,
-                  callDataResponse: null,
-                }));
-              }}
-            >
-              Reset
-            </button>
+            type="button"
+            className="px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 transition font-medium"
+            onClick={() => {
+              setState(prev => ({
+                ...prev,
+                fromToken: null,
+                toToken: null,
+                fromChain: null,
+                toChain: null,
+                amount: "",
+                quoteOutputAmount: null,
+                routeOutputAmount: null,
+                currentAction: "idle",
+                routeResponse: null,
+              }));
+            }}
+          >
+            Clear
+          </button>
           </div>
         </form>
       </div>

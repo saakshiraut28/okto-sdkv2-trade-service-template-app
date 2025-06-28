@@ -257,7 +257,7 @@ function SameChainTradePage() {
         ...prev,
         quoteOutputAmount,
         isQuoteLoading: false,
-        currentAction: "get_best_route", // Set next state
+        currentAction: "get_best_route", 
       }));
 
     } catch (err) {
@@ -603,15 +603,6 @@ function SameChainTradePage() {
           </div>
         </div>
 
-        {outputAmount && (
-          <div className="bg-gray-700 p-4 rounded-lg">
-            <p className="text-green-400 text-lg">
-              Expected Output: <strong>{outputAmount} {state.toToken?.symbol}</strong>
-              {state.isRouteLoading && <span className="text-yellow-400"> (calculating...)</span>}
-            </p>
-          </div>
-        )}
-
         <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200">
           <h1 className="font-semibold mb-1">ℹ️ Understanding Get Quote & Get Best Route</h1>
           <p>
@@ -626,39 +617,67 @@ function SameChainTradePage() {
           <img src={SameChainFlow} />
         </div>
 
+        {outputAmount && (
+          <div className="bg-gray-700 p-4 rounded-lg">
+            <p className="text-green-400 text-lg">
+              Expected Output: <strong>{outputAmount} {state.toToken?.symbol}</strong>
+              {state.isRouteLoading && <span className="text-yellow-400"> (calculating...)</span>}
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-4">
-          {/* Get Quote Button */}
           <button
             type="button"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.quoteOutputAmount
-              ? "bg-gray-600 hover:bg-gray-700"
-              : isDisabled
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
                 ? "bg-gray-600 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
+              : state.quoteOutputAmount || state.routeResponse
+                ? "bg-gray-600 text-gray-200"
+                : "bg-blue-600 hover:bg-blue-700"
               }`}
             disabled={isDisabled}
-            onClick={() => {
-              handleGetQuote();
-            }}
+            onClick={() => handleGetQuote()}
           >
             {state.isTxSubmitting && state.currentAction === "get_quote"
               ? "Getting Quote..."
-              : state.quoteOutputAmount
-                ? "Proceed with Get Best Route →"
-                : "Get Quote"
+              : state.quoteOutputAmount || state.routeResponse
+                ? "Proceed to Get Best Route →"
+                : "1. Get Quote"
+            }
+          </button>
+
+          <button
+            type="button"
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+              ? "bg-gray-600 cursor-not-allowed"
+              : state.routeResponse
+                ? "bg-gray-600 text-gray-200"
+                : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            disabled={isDisabled}
+            onClick={() => handleGetBestRoute()}
+          >
+            {state.isTxSubmitting && state.currentAction === "get_best_route"
+              ? "Getting Route..."
+              : state.routeResponse
+                ? "Proceed with Execute Swap →"
+                : "2. Get Route"
             }
           </button>
 
           <button
             type="submit"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${!state.routeResponse || isDisabled
               ? "bg-gray-600 cursor-not-allowed"
               : "bg-blue-600 hover:bg-blue-700"
               }`}
-            disabled={isDisabled}
+            disabled={!state.routeResponse || isDisabled}
           >
-            {state.isTxSubmitting ? "Processing..." : actionLabel}
-          </button>   
+            {state.isTxSubmitting && (state.currentAction === "approve" || state.currentAction === "swap")
+              ? "Executing..."
+              : "3. Execute"
+            }
+          </button>
 
           <button
             type="button"
