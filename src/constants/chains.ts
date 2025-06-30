@@ -10,7 +10,7 @@ export const CHAIN_ID_TO_NAME: Record<number, string> = {
 export const CHAIN_NATIVE_SYMBOL: Record<number, string> = {
   1: "ETH", // Ethereum
   56: "BNB", // BNB Chain
-  137: "MATIC", // Polygon
+  137: "POL", // Polygon
   8453: "BASE", // Base
   42161: "ETH", // Arbitrum
   10: "ETH", // Optimism
@@ -43,7 +43,7 @@ export const CAIP_TO_NAME: Record<string, string> = {
 export const CAIP_TO_NATIVE_SYMBOL: Record<string, string> = {
   "eip155:1": "ETH",
   "eip155:56": "BNB",
-  "eip155:137": "MATIC",
+  "eip155:137": "POL",
   "eip155:8453": "BASE",
   "eip155:42161": "ETH",
   "eip155:10": "ETH",

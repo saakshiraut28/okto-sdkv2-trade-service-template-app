@@ -15,18 +15,18 @@ export const tradeServiceStagingClient = axios.create({
 });
 
 // Only for Local Development
-// export const tradeServiceSandboxClient = axios.create({
-//   baseURL: "/trade-sandbox-api-proxy",
-//   timeout: 30000,
-// });
-
 export const tradeServiceSandboxClient = axios.create({
-  baseURL: "https://sandbox-okto-trade-service-kong.okto.tech/v1",
+  baseURL: "/trade-sandbox-api-proxy",
   timeout: 30000,
-  headers: {
-    "X-Api-Key": TRADE_SANDBOX_API_KEY,
-  },
 });
+
+// export const tradeServiceSandboxClient = axios.create({
+//   baseURL: "https://sandbox-okto-trade-service-kong.okto.tech/v1",
+//   timeout: 30000,
+//   headers: {
+//     "X-Api-Key": TRADE_SANDBOX_API_KEY,
+//   },
+// });
 
 export const tradeServiceProductionClient = axios.create({
   baseURL: "https://okto-trade-service-kong.okto.tech/v1",

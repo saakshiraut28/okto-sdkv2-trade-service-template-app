@@ -12,6 +12,7 @@ import {
 } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import CrossChainFlow from "../assets/cross-chain-swaps-fst-flow.png";
+import CrossChainFlowNfst from "../assets/cross-chain-swaps-nfst-flow.png";
 
 // Import your existing components
 import TokenInput from "../components/TokenInput";
@@ -503,6 +504,10 @@ function CrossChainTradePage() {
     }
   };
 
+  const handleApproval = async () => {
+
+  }
+
   // Initialize bridge transaction
   const handleInitBridgeTransaction = async () => {
     console.log("Init Bridge Transaction called");
@@ -706,13 +711,13 @@ function CrossChainTradePage() {
   const outputAmount = state.routeOutputAmount || state.quoteOutputAmount;
 
   const actionLabel = {
-    accept: "Accept Cross-Chain Trade",
-    generate_call_data: "Generate Call Data",
-    init_bridge_txn: "Initialize Bridge",
+    accept: "Sign Permit Data",
+    generate_call_data: "Get Call Data",
+    init_bridge_txn: "Execute Init Txn",
     register_intent: "Register Intent",
     get_best_route: "Get Best Route",
-    idle: "Accept Cross-Chain Trade",
-    get_quote: "Getting Quote...",
+    idle: "Sign Permit Data",
+    get_quote: "Get Quote",
   }[state.currentAction];
 
   return (
@@ -871,6 +876,7 @@ function CrossChainTradePage() {
           <br />
           <span>Here's the diagram explaining the <strong>Cross Chain Swap Flow using Okto Trade Service:</strong></span>
           <img src={CrossChainFlow} />
+          <img src={CrossChainFlowNfst} className="mt-1" />
         </div>
 
           {outputAmount && state.fromChain !== state.toChain && (
@@ -923,7 +929,7 @@ function CrossChainTradePage() {
             {state.isTxSubmitting && state.currentAction === "get_best_route"
               ? "Getting Route Info..."
               : state.routeOutputAmount
-                ? "Proceed with Call Data →"
+                ? "Proceed with Accept Trade →"
                 : "Get Best Route"
             }
           </button>
@@ -946,7 +952,6 @@ function CrossChainTradePage() {
               setState(prev => ({
                 ...prev,
                 fromToken: null,
-                toToken: null,
                 fromChain: null,
                 toChain: null,
                 amount: "",

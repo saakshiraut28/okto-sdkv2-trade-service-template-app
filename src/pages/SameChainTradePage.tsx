@@ -642,7 +642,7 @@ function SameChainTradePage() {
               ? "Getting Quote..."
               : state.quoteOutputAmount || state.routeResponse
                 ? "Proceed to Get Best Route →"
-                : "1. Get Quote"
+                : "Get Quote"
             }
           </button>
 
@@ -661,7 +661,7 @@ function SameChainTradePage() {
               ? "Getting Route..."
               : state.routeResponse
                 ? "Proceed with Execute Swap →"
-                : "2. Get Route"
+                : "Get Route"
             }
           </button>
 
@@ -675,7 +675,7 @@ function SameChainTradePage() {
           >
             {state.isTxSubmitting && (state.currentAction === "approve" || state.currentAction === "swap")
               ? "Executing..."
-              : "3. Execute"
+              : "Execute"
             }
           </button>
 
