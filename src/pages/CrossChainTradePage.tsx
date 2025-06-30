@@ -711,7 +711,7 @@ function CrossChainTradePage() {
     init_bridge_txn: "Initialize Bridge",
     register_intent: "Register Intent",
     get_best_route: "Get Best Route",
-    idle: "Get Best Route",
+    idle: "Accept Cross-Chain Trade",
     get_quote: "Getting Quote...",
   }[state.currentAction];
 

@@ -39,7 +39,7 @@ function TradeServiceSecret() {
             <div className="flex mb-6 gap-2">
                 <label className="block text-md font-medium mb-2">Environment: </label>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    {["sandbox", "staging", "production"].map((env) => (
+                    {["sandbox", "production"].map((env) => (
                         <label key={env} className="flex items-center gap-2 text-sm">
                             <input
                                 type="radio"
@@ -58,9 +58,9 @@ function TradeServiceSecret() {
             <p className="text-sm text-gray-400">
                 <span className="font-medium text-white">Current Secret:</span>{" "}
                 {isCustomSecretSet ? (
-                    <span className="text-green-400">Custom (from user)</span>
+                    <span className="text-blue-400">Your Trade Service secret will be used.</span>
                 ) : (
-                    <span className="text-yellow-400">Default</span>
+                        <span className="text-blue-400">No Trade Service secret provided. Using the default secret.</span>
                 )}
             </p>
         </div>
