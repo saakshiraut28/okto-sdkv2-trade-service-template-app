@@ -1,10 +1,9 @@
 import { Component } from "react";
 import {
   getEvmTokenMetadata,
-  getSolanaTokenMetadata,
 } from "../utils/chainHelpers";
 import { ethers } from "ethers";
-import { CHAIN_ID_TO_KNOWN_TOKENS } from "../constants/chains";
+import { CHAIN_ID_TO_KNOWN_TOKENS, CAIP_TO_NATIVE_SYMBOL } from "../constants/chains";
 
 interface Props {
   chainId: string;
@@ -61,16 +60,12 @@ class TokenInput extends Component<Props, State> {
 
     try {
       const chainType = chainId.split(":")[0];
-      const chainKey = chainId.split(":")[1]; // EVM or Solana ID
+      const chainKey = chainId.split(":")[1]; // EVM chain ID
       if (chainType === "eip155") {
         const { symbol, decimals } = await getEvmTokenMetadata(
           parseInt(chainKey),
           newAddress
         );
-        onValidToken(newAddress, symbol, decimals, false);
-        this.setState({ tokenSymbol: symbol });
-      } else if (chainType === "solana") {
-        const { symbol, decimals } = await getSolanaTokenMetadata(newAddress);
         onValidToken(newAddress, symbol, decimals, false);
         this.setState({ tokenSymbol: symbol });
       }
@@ -86,15 +81,16 @@ class TokenInput extends Component<Props, State> {
 
     const caipParts = chainId.split(":");
     const chainType = caipParts[0];
-    const chainKey = caipParts[1]; // EVM or Solana ID
+    const chainKey = caipParts[1]; // EVM chain ID
 
     const knownTokens = CHAIN_ID_TO_KNOWN_TOKENS[chainKey];
     const tokenAddress = knownTokens?.[symbol];
 
     if (symbol === "NATIVE") {
-      const isSol = chainType === "solana";
-      const decimals = isSol ? 9 : 18;
-      const symbolStr = isSol ? "SOL" : "ETH";
+      const decimals = 18;
+
+      // Get the correct native token symbol using CAIP format
+      const symbolStr = CAIP_TO_NATIVE_SYMBOL[chainId] || "ETH"; // Fallback to ETH
 
       this.setState({ tokenAddress: "native", tokenSymbol: symbolStr });
       onValidToken(ethers.ZeroAddress, symbolStr, decimals, true);
@@ -104,10 +100,7 @@ class TokenInput extends Component<Props, State> {
     if (tokenAddress) {
       // Fetch decimals dynamically
       try {
-        const { symbol: resolvedSymbol, decimals } =
-          chainType === "eip155"
-            ? await getEvmTokenMetadata(parseInt(chainKey), tokenAddress)
-            : await getSolanaTokenMetadata(tokenAddress);
+        const { symbol: resolvedSymbol, decimals } = await getEvmTokenMetadata(parseInt(chainKey), tokenAddress);
 
         this.setState({ tokenAddress, tokenSymbol: resolvedSymbol });
         onValidToken(tokenAddress, resolvedSymbol, decimals, false);
@@ -157,7 +150,6 @@ class TokenInput extends Component<Props, State> {
         <span className="text-sm text-gray-200 font-normal">
           For demonstration purposes and easy select, we have provided these token buttons. In practice, you can enter the token address of any token available on selected chain.
         </span>
-        {/* Quick select buttons */}
         {chainId && !forceToken && (
           <div className="mt-2 flex flex-wrap gap-2">
             {Object.keys(
