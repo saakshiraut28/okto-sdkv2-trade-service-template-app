@@ -26,6 +26,7 @@ import {
   getBestRoute,
   getCallData,
   registerIntent,
+  getOrderDetails,
 } from "../api/tradeServiceClient";
 
 // Types
@@ -64,6 +65,8 @@ interface CrossChainTradeState {
   permitSignature: string | null;
   permitData: unknown | null;
   callDataResponse: any | null;
+  registerIntentReq: any | null;
+  registerIntentResponse: any | null;
 }
 
 function CrossChainTradePage() {
@@ -96,6 +99,8 @@ function CrossChainTradePage() {
     permitSignature: null,
     permitData: null,
     callDataResponse: null,
+    registerIntentReq: null,
+    registerIntentResponse: null,
   });
 
   // Get balance for from token
@@ -742,6 +747,7 @@ function CrossChainTradePage() {
         orderBytesSignature: signature,
         caipId: state.fromChain,
       };
+      setState(prev => ({ ...prev, registerIntentReq: registerPayload }));
 
       await new Promise<void>((resolve) => {
         openRequestModal(
@@ -757,17 +763,17 @@ function CrossChainTradePage() {
 
       // @ts-ignore
       const intentRes = await registerIntent(state.environment, registerPayload);
+      setState(prev => ({ ...prev, registerIntentResponse: intentRes }));
 
       await openResponseModal(
         "Register Intent Response",
         "Step 5: Cross-chain order registered",
         intentRes
       );
-
-      toast.success("Cross-chain trade completed successfully!");
+      console.log("Register Intent Response: ", intentRes);
 
       // Reset form after successful trade
-      setState(prev => ({ ...prev, currentAction: "idle" }));
+      setState(prev => ({ ...prev, currentAction: "get_order_details", isTxSubmitting: false }));
 
     } catch (err) {
       console.error("Failed to register intent:", err);
@@ -776,6 +782,61 @@ function CrossChainTradePage() {
     }
   };
 
+  const handleGetOrderDetails = async () => {
+    console.log("Get Order Details called");
+    if (!state.registerIntentResponse || !address) {
+      toast.error("Missing register intent data needed for fetching order details");
+      return;
+    }
+
+    try {
+      const orderDetailsPayload = {
+        orderId: state.registerIntentResponse.data,
+        caipId: state.fromChain,
+      };
+      console.log("Order Details Payload: ", orderDetailsPayload);
+
+      await new Promise<void>((resolve) => {
+        openRequestModal(
+          "Get Order Details Request",
+          "Step 6: Getting order details",
+          orderDetailsPayload,
+          async () => {
+            setState(prev => ({ ...prev, modalOpen: false }));
+            resolve();
+          }
+        );
+      });
+
+      // @ts-ignore
+      const orderDetailsRes = await getOrderDetails(state.environment, orderDetailsPayload);
+      console.log("Get Order Details Response: ", orderDetailsRes);
+
+      if (orderDetailsRes.status === "success") {
+        await openRequestResponseModal(
+          "Get Order Details Response",
+          "Step 6: Order details retrieved",
+          orderDetailsPayload,
+          orderDetailsRes
+        );
+        toast.success("Cross-chain trade completed successfully!");
+      } else {
+        await openRequestResponseModal(
+          "Get Order Details Response",
+          "Step 6: Transaction Failed",
+          orderDetailsPayload,
+          orderDetailsRes
+        );
+        toast.error("Transaction failed!");
+      }
+
+      setState(prev => ({ ...prev, currentAction: "idle", isTxSubmitting: false }));
+
+    } catch (err) {
+      console.error("Failed to get order details:", err);
+      toast.error("Failed to get order details");
+    }
+  }
 
   if (!isConnected) {
     return (
@@ -858,7 +919,7 @@ function CrossChainTradePage() {
             } else if (state.currentAction === "get_best_route") {
               handleGetBestRoute();
             } else if (state.currentAction === "get_order_details") {
-              // Handle get order details if needed
+              handleGetOrderDetails();
             }
           }}
           className="space-y-6"
@@ -994,10 +1055,10 @@ function CrossChainTradePage() {
           <button
             type="button"
             className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.quoteOutputAmount || state.routeOutputAmount
-              ? "bg-gray-600 hover:bg-gray-700"
+              ? "bg-gray-600 cursor-not-allowed"
               : isDisabled
                 ? "bg-gray-600 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
+                : "bg-blue-600 hover:bg-blue-700"
               }`}
             disabled={isDisabled}
             onClick={() => {
@@ -1015,10 +1076,10 @@ function CrossChainTradePage() {
           <button
             type="button"
             className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.routeOutputAmount
-              ? "bg-gray-600 hover:bg-gray-700"
+              ? "bg-gray-600 cursor-not-allowed"
               : isDisabled
                 ? "bg-gray-600 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
+                : "bg-blue-600 hover:bg-blue-700"
               }`}
             disabled={isDisabled}
             onClick={() => {
@@ -1035,9 +1096,11 @@ function CrossChainTradePage() {
 
           <button
             type="submit"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${!state.routeOutputAmount
               ? "bg-gray-600 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+              : isDisabled
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
               }`}
             disabled={isDisabled}
           >
