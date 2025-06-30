@@ -8,27 +8,28 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss(), nodePolyfills()],
-    server: {
-      proxy: {
-        "/trade-stage-api-proxy": {
-          target: "https://okto-trade-service.oktostage.com",
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/trade-stage-api-proxy/, "/v1"),
-          headers: {
-            "X-Api-Key": env.VITE_TRADE_SERVICE_SANDBOX_API_KEY,
-          },
-        },
-        "/trade-sandbox-api-proxy": {
-          target: "https://sandbox-okto-trade-service-kong.okto.tech/",
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/trade-sandbox-api-proxy/, "/v1"),
-          headers: {
-            "X-Api-Key": env.VITE_TRADE_SERVICE_SANDBOX_API_KEY,
-          },
-        },
-      },
-    },
+    // Only for Local Development
+    // server: {
+    //   proxy: {
+    //     "/trade-stage-api-proxy": {
+    //       target: "https://okto-trade-service.oktostage.com",
+    //       changeOrigin: true,
+    //       secure: false,
+    //       rewrite: (path) => path.replace(/^\/trade-stage-api-proxy/, "/v1"),
+    //       headers: {
+    //         "X-Api-Key": env.VITE_TRADE_SERVICE_SANDBOX_API_KEY,
+    //       },
+    //     },
+    //     "/trade-sandbox-api-proxy": {
+    //       target: "https://sandbox-okto-trade-service-kong.okto.tech/",
+    //       changeOrigin: true,
+    //       secure: false,
+    //       rewrite: (path) => path.replace(/^\/trade-sandbox-api-proxy/, "/v1"),
+    //       headers: {
+    //         "X-Api-Key": env.VITE_TRADE_SERVICE_SANDBOX_API_KEY,
+    //       },
+    //     },
+    //   },
+    // },
   };
 });
