@@ -407,6 +407,9 @@ function CrossChainTradePage() {
         });
 
         console.log("After Permit signature set the current Action state to generate_call_data");
+
+        toast.info("Permit signature obtained, proceeding to generate call data");
+
         setState(prev => ({
           ...prev,
           currentAction: "generate_call_data",
@@ -414,6 +417,9 @@ function CrossChainTradePage() {
           permitData: permitData,
         }));
       } else {
+
+        toast.info("No permit signature required, proceeding to generate call data");
+
         console.log("without Permit signature set the current Action state to generate_call_data");
         setState(prev => ({ ...prev, currentAction: "generate_call_data" }));
       }
@@ -791,7 +797,7 @@ function CrossChainTradePage() {
 
     try {
       const orderDetailsPayload = {
-        orderId: state.registerIntentResponse.data,
+        orderId: state.registerIntentResponse,
         caipId: state.fromChain,
       };
       console.log("Order Details Payload: ", orderDetailsPayload);
@@ -812,23 +818,13 @@ function CrossChainTradePage() {
       const orderDetailsRes = await getOrderDetails(state.environment, orderDetailsPayload);
       console.log("Get Order Details Response: ", orderDetailsRes);
 
-      if (orderDetailsRes.status === "success") {
-        await openRequestResponseModal(
-          "Get Order Details Response",
-          "Step 6: Order details retrieved",
-          orderDetailsPayload,
-          orderDetailsRes
-        );
-        toast.success("Cross-chain trade completed successfully!");
-      } else {
-        await openRequestResponseModal(
-          "Get Order Details Response",
-          "Step 6: Transaction Failed",
-          orderDetailsPayload,
-          orderDetailsRes
-        );
-        toast.error("Transaction failed!");
-      }
+      await openRequestResponseModal(
+        "Get Order Details Response",
+        "Step 6: Order details retrieved",
+        orderDetailsPayload,
+        orderDetailsRes
+      );
+      toast.success("Cross-chain trade completed successfully!");
 
       setState(prev => ({ ...prev, currentAction: "idle", isTxSubmitting: false }));
 
@@ -998,12 +994,12 @@ function CrossChainTradePage() {
             }}
         />
 
-          {state.fromChain === state.toChain && state.fromChain && state.toChain && (
-            <div className="bg-yellow-900 border border-yellow-600 p-4 rounded-lg">
-              <p className="text-yellow-300">
-                ⚠️ Source and destination chains are the same. Please select different chains for cross-chain trading.
-              </p>
-            </div>
+        {state.fromChain === state.toChain && state.fromChain && state.toChain && (
+          <div className="bg-yellow-900 border border-yellow-600 p-4 rounded-lg">
+            <p className="text-yellow-300">
+              ⚠️ Source and destination chains are the same. Please select different chains for cross-chain trading.
+            </p>
+          </div>
         )}
 
         <div className="mb-6">
@@ -1114,8 +1110,8 @@ function CrossChainTradePage() {
               setState(prev => ({
                 ...prev,
                 fromToken: null,
-                fromChain: null,
-                toChain: null,
+                fromChain: "",
+                toChain: "",
                 amount: "",
                 quoteOutputAmount: null,
                 routeOutputAmount: null,

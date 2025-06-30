@@ -15,7 +15,6 @@ import SameChainFlow from '../assets/same-chain-swaps-flow.png';
 import TokenInput from "../components/TokenInput";
 import AmountInput from "../components/AmountInput";
 import RequestResponseModal from "../components/RequestResponseModal";
-
 import { CAIP_TO_NAME } from "../constants/chains";
 import {
   getQuote,
@@ -93,6 +92,13 @@ function SameChainTradePage() {
       enabled: !!address && !!state.fromToken,
     }
   });
+
+  const areTokensSame = (fromToken, toToken) => {
+    if (!fromToken || !toToken) return false;
+    return fromToken.address === toToken.address && fromToken.symbol === toToken.symbol;
+  };
+
+  const showSameTokenWarning = areTokensSame(state.fromToken, state.toToken)
 
   // Set chain ID when wallet connects
   React.useEffect(() => {
@@ -463,8 +469,8 @@ function SameChainTradePage() {
   const outputAmount = state.routeOutputAmount || state.quoteOutputAmount;
 
   const actionLabel = {
-    approve: "Approve Token",
-    swap: "Execute Swap",
+    approve: "Execute Approval Tx",
+    swap: "Execute Swap Tx",
     idle: "Get Best Route",
     get_best_route: "Get Best Route",
     get_quote: "Getting Quote..",
@@ -584,6 +590,14 @@ function SameChainTradePage() {
             }));
           }}
         />
+
+        {showSameTokenWarning && (
+          <div className="bg-yellow-900 border border-yellow-600 p-4 rounded-lg">
+            <p className="text-yellow-300">
+              ⚠️ Source and destination tokens are the same. Please select different tokens for same-chain trading.
+            </p>
+          </div>
+        )}
 
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-300 mb-2">

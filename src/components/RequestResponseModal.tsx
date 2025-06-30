@@ -11,6 +11,7 @@ interface RequestResponseModalProps {
   responsePayload?: any;
   isRequest?: boolean;
   onConfirm?: () => Promise<any>;
+  onCancel?: () => void; // Add this new prop
 }
 
 export function stringifySafe(obj: any, spacing = 2) {
@@ -30,6 +31,7 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
   responsePayload,
   isRequest = false,
   onConfirm,
+  onCancel, // Add this prop
 }) => {
   const [copiedRequest, setCopiedRequest] = React.useState(false);
   const [copiedResponse, setCopiedResponse] = React.useState(false);
@@ -54,6 +56,13 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
     if (onConfirm) {
       await onConfirm();
     }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel(); // Call the cancel handler
+    }
+    onClose(); // Then close the modal
   };
 
   if (!open) return null;
@@ -143,7 +152,7 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
                 Send Request
               </button>
               <button
-                onClick={onClose}
+                onClick={handleCancel} // Use handleCancel instead of onClose
                 className="bg-gray-300 dark:bg-red-700 text-black dark:text-white px-4 py-2 rounded hover:bg-gray-400 dark:hover:bg-gray-600"
               >
                 Close
@@ -151,7 +160,7 @@ const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
             </>
           ) : (
             <button
-              onClick={onClose}
+                onClick={handleCancel} // Use handleCancel here too for consistency
               className="bg-gray-300 dark:bg-red-700 text-black dark:text-white px-4 py-2 rounded hover:bg-gray-400 dark:hover:bg-gray-600"
             >
                 Close
