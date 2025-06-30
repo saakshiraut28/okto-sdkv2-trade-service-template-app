@@ -50,7 +50,7 @@ interface CrossChainTradeState {
   quoteOutputAmount: string | null;
   routeOutputAmount: string | null;
   routeResponse: any | null;
-  currentAction: "idle" | "get_quote" | "accept" | "generate_call_data" | "init_bridge_txn" | "register_intent" | "get_best_route";
+  currentAction: "idle" | "get_quote" | "accept" | "generate_call_data" | "init_bridge_txn" | "register_intent" | "get_best_route" | "approval" | "get_order_details";
   isQuoteLoading: boolean;
   isRouteLoading: boolean;
   isTxSubmitting: boolean;
@@ -473,6 +473,15 @@ function CrossChainTradePage() {
         callDataRes
       );
 
+      const approvalStep = callDataRes?.steps?.find(
+        (s) => s.metadata?.transactionType === "approval"
+      );
+
+      if (approvalStep) {
+        console.log("Approval step found, setting current action to approval");
+        setState(prev => ({ ...prev, currentAction: "approval" }));
+        return;
+      }
 
       const nextBridgeStep = callDataRes?.steps?.find(
         (s) =>
@@ -505,8 +514,104 @@ function CrossChainTradePage() {
   };
 
   const handleApproval = async () => {
+    console.log("Approval called");
+    if (!state.callDataResponse || !address || !walletClient) {
+      toast.error("Missing required data for approval");
+      return;
+    }
 
-  }
+    const approvalStep = state.callDataResponse.steps?.find(
+      (s) => s.metadata?.transactionType === "approval"
+    );
+
+    if (!approvalStep || !approvalStep.txnData) {
+      toast.error("No approval transaction found");
+      return;
+    }
+
+    try {
+      setState(prev => ({ ...prev, isTxSubmitting: true }));
+
+      const txRequest = approvalStep.txnData;
+
+      await new Promise<void>((resolve) => {
+        openRequestModal(
+          "4. Approval Transaction",
+          `Step 4: Approving token spend
+      📍 This approves the bridge contract to spend your tokens.`,
+          txRequest,
+          async () => {
+            setState(prev => ({ ...prev, modalOpen: false }));
+            resolve();
+          }
+        );
+      });
+
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: txRequest.to,
+        data: txRequest.data,
+        value: txRequest.value ? BigInt(txRequest.value) : undefined,
+        gas: txRequest.gasLimit ? BigInt(txRequest.gasLimit) : undefined,
+        kzg: undefined,
+        chain: undefined,
+      });
+
+      toast.info(`Approval transaction submitted: ${hash}`);
+
+      const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+
+      await openResponseModal(
+        "Approval Transaction Complete",
+        "Token approval confirmed",
+        receipt
+      );
+
+      toast.success("Approval transaction confirmed");
+
+      // Determine next step after approval
+      const remainingSteps = state.callDataResponse.steps.filter(
+        (s) => s.metadata?.transactionType !== "approval"
+      );
+
+      if (remainingSteps.length !== 1) {
+        toast.error("Invalid remaining steps after approval");
+        setState(prev => ({ ...prev, currentAction: "idle" }));
+        return;
+      }
+
+      const nextStep = remainingSteps[0];
+      const metaData = nextStep.metadata;
+
+      if (!metaData) {
+        toast.error("Remaining step does not have metadata");
+        setState(prev => ({ ...prev, currentAction: "idle" }));
+        return;
+      }
+
+      if (metaData.serviceType === "bridge") {
+        if (metaData.transactionType === "init") {
+          console.log("After approval, moving to init_bridge_txn");
+          setState(prev => ({ ...prev, currentAction: "init_bridge_txn" }));
+        } else if (!metaData.transactionType) {
+          console.log("After approval, moving to register_intent");
+          setState(prev => ({ ...prev, currentAction: "register_intent" }));
+        } else {
+          toast.error("Unknown transaction type after approval");
+          setState(prev => ({ ...prev, currentAction: "idle" }));
+        }
+      } else {
+        toast.error("Unknown service type after approval");
+        setState(prev => ({ ...prev, currentAction: "idle" }));
+      }
+
+    } catch (err) {
+      console.error("Failed to send approval transaction:", err);
+      toast.error("Failed to complete approval transaction");
+    } finally {
+      setState(prev => ({ ...prev, isTxSubmitting: false }));
+    }
+  };
 
   // Initialize bridge transaction
   const handleInitBridgeTransaction = async () => {
@@ -662,19 +767,7 @@ function CrossChainTradePage() {
       toast.success("Cross-chain trade completed successfully!");
 
       // Reset form after successful trade
-      setState(prev => ({
-        ...prev,
-        fromToken: null,
-        toToken: null,
-        amount: "",
-        quoteOutputAmount: null,
-        routeOutputAmount: null,
-        routeResponse: null,
-        currentAction: "idle",
-        permitSignature: null,
-        permitData: null,
-        callDataResponse: null,
-      }));
+      setState(prev => ({ ...prev, currentAction: "idle" }));
 
     } catch (err) {
       console.error("Failed to register intent:", err);
@@ -712,12 +805,14 @@ function CrossChainTradePage() {
 
   const actionLabel = {
     accept: "Sign Permit Data",
+    approval: "Execute Approve Tx",
     generate_call_data: "Get Call Data",
     init_bridge_txn: "Execute Init Txn",
     register_intent: "Register Intent",
     get_best_route: "Get Best Route",
     idle: "Sign Permit Data",
     get_quote: "Get Quote",
+    get_order_details: "Get Order Details",
   }[state.currentAction];
 
   return (
@@ -750,6 +845,8 @@ function CrossChainTradePage() {
             e.preventDefault();
             if (state.currentAction === "accept") {
               handleAccept();
+            } else if (state.currentAction === "approval") {
+              handleApproval();
             } else if (state.currentAction === "generate_call_data") {
               handleGenerateCallData();
             } else if (state.currentAction === "init_bridge_txn") {
@@ -760,6 +857,8 @@ function CrossChainTradePage() {
               handleGetQuote();
             } else if (state.currentAction === "get_best_route") {
               handleGetBestRoute();
+            } else if (state.currentAction === "get_order_details") {
+              // Handle get order details if needed
             }
           }}
           className="space-y-6"
