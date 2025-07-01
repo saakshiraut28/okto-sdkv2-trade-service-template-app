@@ -13,6 +13,7 @@ import '@rainbow-me/rainbowkit/styles.css';
 import {
   getDefaultConfig,
   RainbowKitProvider,
+  connectorsForWallets
 } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
 import { mainnet, polygon, optimism, arbitrum, base } from "wagmi/chains";
@@ -21,12 +22,28 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { TradeServiceProvider } from "./context/TradeServiceContext";
+import { metaMaskWallet, phantomWallet } from '@rainbow-me/rainbowkit/wallets';
 
+
+const connectors = connectorsForWallets(
+  [
+    {
+      groupName: 'Recommended',
+      wallets: [metaMaskWallet, phantomWallet],
+    },
+  ],
+  {
+    appName: 'My RainbowKit App',
+    projectId: 'YOUR_PROJECT_ID',
+  }
+);
 
 export const config = getDefaultConfig({
   appName: 'My RainbowKit App',
   projectId: 'YOUR_PROJECT_ID',
   chains: [mainnet, polygon, optimism, arbitrum, base],
+  // @ts-ignore
+  connectors,
 });
 
 const queryClient = new QueryClient();

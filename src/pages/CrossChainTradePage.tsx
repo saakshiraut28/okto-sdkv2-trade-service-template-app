@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ethers } from "ethers";
@@ -28,8 +28,15 @@ import {
   registerIntent,
   getOrderDetails,
 } from "../api/tradeServiceClient";
+import HistoryModal from "../components/HistoryModal";
 
 // Types
+interface HistoryEntry {
+  title: string;
+  requestPayload: any;
+  responsePayload: any;
+}
+
 interface CrossChainTradeState {
   environment: string;
   fromChain: string;
@@ -74,6 +81,8 @@ function CrossChainTradePage() {
   const { switchChain } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const [state, setState] = React.useState<CrossChainTradeState>({
     environment: "sandbox",
@@ -102,6 +111,13 @@ function CrossChainTradePage() {
     registerIntentReq: null,
     registerIntentResponse: null,
   });
+
+  const addToHistory = (title: string, requestPayload: any, responsePayload: any) => {
+    setHistory((prev) => [
+      ...prev,
+      { title, requestPayload, responsePayload },
+    ]);
+  };
 
   // Get balance for from token
   const { data: balance } = useBalance({
@@ -277,6 +293,8 @@ function CrossChainTradePage() {
         quoteRes
       );
 
+      addToHistory("Get Quote", quotePayload, quoteRes);
+
       const quoteOutputAmount = ethers.formatUnits(
         quoteRes.outputAmount,
         state.toToken.decimals
@@ -356,6 +374,8 @@ function CrossChainTradePage() {
         quotePayload,
         routeRes
       );
+
+      addToHistory("Get Best Route", quotePayload, routeRes);
 
       const routeOutputAmount = ethers.formatUnits(
         // @ts-ignore
@@ -484,14 +504,19 @@ function CrossChainTradePage() {
         callDataRes
       );
 
+      addToHistory("Generate Call Data", callDataPayload, callDataRes);
+
       const approvalStep = callDataRes?.steps?.find(
         (s) => s.metadata?.transactionType === "approval"
       );
 
       if (approvalStep) {
+        toast.info("Approval step found, proceeding to approval");
         console.log("Approval step found, setting current action to approval");
         setState(prev => ({ ...prev, currentAction: "approval" }));
         return;
+      } else {
+        toast.info("No approval step found, proceeding to next step");
       }
 
       const nextBridgeStep = callDataRes?.steps?.find(
@@ -577,6 +602,8 @@ function CrossChainTradePage() {
         "Token approval confirmed",
         receipt
       );
+
+      addToHistory("Approval Transaction", txRequest, receipt);
 
       toast.success("Approval transaction confirmed");
 
@@ -682,10 +709,10 @@ function CrossChainTradePage() {
         "Save the txn receipt",
         receipt
       );
+
+      addToHistory("Bridge Transaction", txRequest, receipt);
       console.log("End of the flow init_bridge_txn flow");
-
       toast.success("Bridge transaction confirmed");
-
       setState((prev) => ({ ...prev, currentAction: "idle" }));
     } catch (err) {
       console.error("Failed to send bridge transaction:", err);
@@ -776,6 +803,7 @@ function CrossChainTradePage() {
         "Step 5: Cross-chain order registered",
         intentRes
       );
+      addToHistory("Register Intent", registerPayload, intentRes);
       console.log("Register Intent Response: ", intentRes);
 
       // Reset form after successful trade
@@ -817,6 +845,7 @@ function CrossChainTradePage() {
       // @ts-ignore
       const orderDetailsRes = await getOrderDetails(state.environment, orderDetailsPayload);
       console.log("Get Order Details Response: ", orderDetailsRes);
+      addToHistory("Get Order Details", orderDetailsPayload, orderDetailsRes);
 
       await openRequestResponseModal(
         "Get Order Details Response",
@@ -1123,7 +1152,20 @@ function CrossChainTradePage() {
             Clear
           </button>
           </div>
-        </form>
+      </form>
+      <div className="mt-2 flex justify-center w-full">
+        <button
+          onClick={() => setIsHistoryOpen(true)}
+          className="bg-blue-600 px-6 py-3 rounded hover:bg-blue-700 w-[300px] text-white font-medium transition"
+        >
+          View History
+        </button>
+      </div>
+      <HistoryModal
+        open={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={history}
+      />
       </div>
   );
 }

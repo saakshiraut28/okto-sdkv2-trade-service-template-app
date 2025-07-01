@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { toast } from "react-toastify";
 import { ethers } from "ethers";
 import {
@@ -20,6 +20,13 @@ import {
   getQuote,
   getBestRoute,
 } from "../api/tradeServiceClient";
+import HistoryModal from "../components/HistoryModal";
+
+interface HistoryEntry {
+  title: string;
+  requestPayload: any;
+  responsePayload: any;
+}
 
 // Types
 interface SameChainTradeState {
@@ -60,6 +67,8 @@ function SameChainTradePage() {
   const { switchChain } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const [state, setState] = React.useState<SameChainTradeState>({
     environment: "sandbox",
@@ -82,6 +91,13 @@ function SameChainTradePage() {
     modalResponsePayload: null,
     isRequestModal: true,
   });
+
+  const addToHistory = (title: string, requestPayload: any, responsePayload: any) => {
+    setHistory((prev) => [
+      ...prev,
+      { title, requestPayload, responsePayload },
+    ]);
+  };
 
   // Get balance for from token
   const { data: balance } = useBalance({
@@ -254,6 +270,8 @@ function SameChainTradePage() {
         quoteRes
       );
 
+      addToHistory("Get Quote", quotePayload, quoteRes);
+
       const quoteOutputAmount = ethers.formatUnits(
         quoteRes.outputAmount,
         state.toToken.decimals
@@ -326,6 +344,8 @@ function SameChainTradePage() {
         quotePayload,
         routeRes
       );
+
+      addToHistory("Get Best Route", quotePayload, routeRes);
 
       const routeOutputAmount = ethers.formatUnits(
         // @ts-ignore
@@ -421,6 +441,7 @@ function SameChainTradePage() {
 
       toast.success(`${type} transaction confirmed`);
 
+      addToHistory("Execute Swap Tx", txRequest, receipt);
 
       setState(prev => ({ ...prev, currentAction: "idle" }));
       // Reset form after successful swap
@@ -713,6 +734,19 @@ function SameChainTradePage() {
           </button>
         </div>
       </form>
+      <div className="mt-2 flex justify-center w-full">
+        <button
+          onClick={() => setIsHistoryOpen(true)}
+          className="bg-blue-600 px-6 py-3 rounded hover:bg-blue-700 w-[300px] text-white font-medium transition"
+        >
+          View History
+        </button>
+      </div>
+      <HistoryModal
+        open={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={history}
+      />
     </div>
   );
 }
