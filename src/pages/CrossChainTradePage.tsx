@@ -1158,7 +1158,7 @@ function CrossChainTradePage() {
           onClick={() => setIsHistoryOpen(true)}
           className="bg-blue-600 px-6 py-3 rounded hover:bg-blue-700 w-[300px] text-white font-medium transition"
         >
-          View History
+          View Request/Response History
         </button>
       </div>
       <HistoryModal

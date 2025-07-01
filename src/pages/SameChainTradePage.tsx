@@ -695,7 +695,7 @@ function SameChainTradePage() {
             {state.isTxSubmitting && state.currentAction === "get_best_route"
               ? "Getting Route..."
               : state.routeResponse
-                ? "Proceed with Execute Swap →"
+                ? "Get Route Done "
                 : "Get Route"
             }
           </button>
@@ -737,9 +737,9 @@ function SameChainTradePage() {
       <div className="mt-2 flex justify-center w-full">
         <button
           onClick={() => setIsHistoryOpen(true)}
-          className="bg-blue-600 px-6 py-3 rounded hover:bg-blue-700 w-[300px] text-white font-medium transition"
+          className="bg-blue-600 mt-4 px-6 py-3 rounded hover:bg-blue-700 w-[300px] text-white font-medium transition"
         >
-          View History
+          View Request/Response History
         </button>
       </div>
       <HistoryModal
