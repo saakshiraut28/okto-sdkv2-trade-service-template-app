@@ -174,7 +174,7 @@ class TokenInput extends Component<Props, State> {
               <InfoIcon className="w-5 h-5" />
             </button>
             {showTooltip && (
-              <div className="absolute right-0 top-8 z-20 w-72 bg-gray-800 border border-gray-600 rounded p-3 text-xs text-gray-300 shadow-lg">
+              <div className="absolute right-0 top-8 z-20 w-72 bg-gray-800 border border-gray-600 rounded p-3 text-sm text-gray-300 shadow-lg">
                 Quick select buttons are provided for demonstration purposes. To test other tokens, simply enter their token address in the given field.
               </div>
             )}
