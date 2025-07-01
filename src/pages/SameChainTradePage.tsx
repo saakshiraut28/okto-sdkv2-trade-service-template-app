@@ -21,6 +21,7 @@ import {
   getBestRoute,
 } from "../api/tradeServiceClient";
 import HistoryModal from "../components/HistoryModal";
+import { InfoIcon } from "lucide-react";
 
 interface HistoryEntry {
   title: string;
@@ -60,6 +61,7 @@ interface SameChainTradeState {
   modalResponsePayload?: any;
   isRequestModal: boolean;
   onConfirmModal?: () => void;
+  showChainTooltip: boolean;
 }
 
 function SameChainTradePage() {
@@ -69,6 +71,7 @@ function SameChainTradePage() {
   const publicClient = usePublicClient();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const tooltipRef = React.useRef<HTMLDivElement>(null);
 
   const [state, setState] = React.useState<SameChainTradeState>({
     environment: "sandbox",
@@ -90,7 +93,28 @@ function SameChainTradePage() {
     modalRequestPayload: null,
     modalResponsePayload: null,
     isRequestModal: true,
+    showChainTooltip: false,
   });
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setState(prev => ({ ...prev, showChainTooltip: false }));
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const toggleChainTooltip = () => {
+    setState(prev => ({
+      ...prev,
+      showChainTooltip: !prev.showChainTooltip
+    }));
+  };
 
   const addToHistory = (title: string, requestPayload: any, responsePayload: any) => {
     setHistory((prev) => [
@@ -500,13 +524,40 @@ function SameChainTradePage() {
   return (
     <div className="my-4">
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-1">Chain:{" "}
-          <span className="text-md text-gray-200 font-normal">
-            Trade Service only works on mainnet. For more information on chains and tokens supported by Okto Trade Service; check <a className="text-indigo-400" href="https://docs.okto.tech/docs/trade-service/supported-networks-tokens" target="_blank">Supported Chains and Tokens</a>
-          </span>
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium mb-1">Chain
+          </label>
+          <div className="relative" ref={tooltipRef}>
+            <button
+              type="button"
+              onClick={toggleChainTooltip}
+              className="text-blue-500 hover:text-blue-700 focus:outline-none focus:text-blue-200 transition-colors bg-gray-700 rounded-full p-1"
+              aria-label="Info"
+            >
+              <InfoIcon className="w-5 h-5" />
+            </button>
+            {state.showChainTooltip && (
+              <div className="absolute right-0 top-6 z-10 w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3">
+                <div className="text-sm text-gray-200">
+                  <span className="text-md text-gray-200 font-normal">
+                    Trade Service only works on mainnet. For more information on chains and tokens supported by Okto Trade Service; check{" "}
+                    <a
+                      className="text-indigo-400 hover:text-indigo-300"
+                      href="https://docs.okto.tech/docs/trade-service/supported-networks-tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Supported Chains and Tokens
+                    </a>
+                  </span>
+                </div>
+                <div className="absolute -top-2 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800"></div>
+              </div>
+            )}
+          </div>
+        </div>
         <select
-          className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
+          className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-1"
           value={state.chainId}
           onChange={(e) => handleChainChange(e.target.value)}
         >
@@ -590,12 +641,6 @@ function SameChainTradePage() {
           balance={balance?.formatted}
         />
 
-        {balance && (
-          <p className="text-sm text-gray-400">
-            Balance: {balance.formatted} {balance.symbol}
-          </p>
-        )}
-
         <TokenInput
           chainId={state.chainId}
           label="To Token"
@@ -631,7 +676,7 @@ function SameChainTradePage() {
             <input
               type="text"
               placeholder="0x... or leave blank to use your wallet"
-              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-1 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={state.toUserWalletAddress || ""}
               onChange={(e) => setState(prev => ({ ...prev, toUserWalletAddress: e.target.value }))}
             />

@@ -990,12 +990,6 @@ function CrossChainTradePage() {
             balance={balance?.formatted}
           />
 
-          {balance && (
-            <p className="text-sm text-gray-400">
-              Balance: {balance.formatted} {balance.symbol}
-            </p>
-          )}
-
           <ChainSelect
             label="To Chain (Destination)"
             value={state.toChain}
@@ -1042,7 +1036,7 @@ function CrossChainTradePage() {
             <input
               type="text"
               placeholder="0x... or leave blank to use your wallet"
-              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-1 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={state.toUserWalletAddress || ""}
               onChange={(e) => setState(prev => ({ ...prev, toUserWalletAddress: e.target.value }))}
             />
