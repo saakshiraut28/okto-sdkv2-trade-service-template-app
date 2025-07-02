@@ -1,12 +1,11 @@
 /**
- * Extracts the Order ID (bytes32) from a transaction receipt containing the OrderInitiated event.
- *
- * Usage:
- * import { extractOrderIdFromReceipt } from "@/utils/extractOrderId";
- * const orderId = extractOrderIdFromReceipt(receipt);
- *
- * Returns `null` if the event is not found.
+ * Extracts the `orderId` (bytes32) from a transaction receipt by locating the `OrderInitiated` event emitted by the OktoULL bridge contract.
+ * 
+ * @param receipt The transaction receipt returned by `publicClient.waitForTransactionReceipt` after the bridge transaction.
+ * @returns The extracted `orderId` as a hex string (e.g., `0x...`), or `null` if the event is not found in the receipt logs.
+ * 
  */
+
 
 // Okto ULL bridge 
 const ORDER_INITIATED_TOPIC = "0xfba6a68bf5ec51e167735408b7eb881b28929f9c0c3ed0db4ea6eb1015261fd6";
