@@ -22,6 +22,9 @@ import {
 } from "../api/tradeServiceClient";
 import HistoryModal from "../components/HistoryModal";
 import { InfoIcon } from "lucide-react";
+import CollapsibleCallout from "../components/CollapsibleCallout";
+import StepIndicator from "../components/StepIndicatior";
+import { useTradeService } from "../context/TradeServiceContext";
 
 interface HistoryEntry {
   title: string;
@@ -50,7 +53,7 @@ interface SameChainTradeState {
   quoteOutputAmount: string | null;
   routeOutputAmount: string | null;
   routeResponse: any | null;
-  currentAction: "idle" | "get_quote" | "get_best_route" | "approve" | "swap";
+  currentAction: "idle" | "get_quote" | "get_best_route" | "approval" | "swap";
   isQuoteLoading: boolean;
   isRouteLoading: boolean;
   isTxSubmitting: boolean;
@@ -65,6 +68,7 @@ interface SameChainTradeState {
 }
 
 function SameChainTradePage() {
+  const { environment } = useTradeService();
   const { address, isConnected, chainId: connectedChainId } = useAccount();
   const { switchChain } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
@@ -72,9 +76,10 @@ function SameChainTradePage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const tooltipRef = React.useRef<HTMLDivElement>(null);
+  const [logs, setLogs] = useState<string[]>(["Initializing same-chain trade flow..."]);
 
   const [state, setState] = React.useState<SameChainTradeState>({
-    environment: "sandbox",
+    environment: environment,
     chainId: "",
     fromToken: null,
     toToken: null,
@@ -294,6 +299,7 @@ function SameChainTradePage() {
         quoteRes
       );
 
+      setLogs(prev => [...prev, "✔️ Quote obtained, proceeding to get best route"]);
       addToHistory("Get Quote", quotePayload, quoteRes);
 
       const quoteOutputAmount = ethers.formatUnits(
@@ -333,7 +339,6 @@ function SameChainTradePage() {
       const fromTokenAddress = state.fromToken.isNative ? "" : state.fromToken.address;
       const toTokenAddress = state.toToken.isNative ? "" : state.toToken.address;
       const toUserWalletAddress = state.toUserWalletAddress || address;
-
       const quotePayload = {
         fromChain: state.chainId,
         toChain: state.chainId,
@@ -369,6 +374,7 @@ function SameChainTradePage() {
         routeRes
       );
 
+      setLogs(prev => [...prev, "✔️ Best route obtained, proceed to executing transaction."]);
       addToHistory("Get Best Route", quotePayload, routeRes);
 
       const routeOutputAmount = ethers.formatUnits(
@@ -379,24 +385,31 @@ function SameChainTradePage() {
 
       // Determine next action based on route steps
       const steps = routeRes.steps || [];
+      const hasApproval = steps.some((step: any) => step.metadata?.transactionType === "approval");
+      const hasDex = steps.some((step: any) => step.metadata?.transactionType === "dex");
 
-      if (steps.length > 0 && steps[0].metadata?.transactionType === "approval") {
-        setState(prev => ({
-          ...prev,
-          routeOutputAmount,
-          isRouteLoading: false,
-          routeResponse: routeRes,
-          currentAction: "approve",
-        }));
+      let nextAction: "approval" | "swap" | "idle";
+
+      if (hasApproval && hasDex) {
+        nextAction = "approval";
+        toast.info("Approval steps found, proceeding to approval transaction.");
+        setLogs(prev => [...prev, "✔️ Approval steps found, proceeding to approval transaction."]);
+      } else if (hasDex) {
+        nextAction = "swap";
+        toast.info("No approval steps found, proceeding directly to DEX swap transaction.");
+        setLogs(prev => [...prev, "✔️ No approval steps found, proceeding directly to DEX swap transaction."]);
       } else {
-        setState(prev => ({
-          ...prev,
-          routeOutputAmount,
-          isRouteLoading: false,
-          routeResponse: routeRes,
-          currentAction: "swap",
-        }));
+        nextAction = "idle";
+        toast.error("Invalid route: No executable steps");
       }
+
+      setState(prev => ({
+        ...prev,
+        routeOutputAmount,
+        isRouteLoading: false,
+        routeResponse: routeRes,
+        currentAction: nextAction,
+      }));
 
     } catch (err) {
       console.error("Failed to get best route:", err);
@@ -411,31 +424,30 @@ function SameChainTradePage() {
   };
 
   // Submit transaction
-  const submitTransaction = async (type: "approval" | "dex") => {
+  const handleApproval = async () => {
     if (!state.routeResponse || !address || !walletClient) {
       toast.error("Missing required data");
       return;
     }
 
     const steps = state.routeResponse.steps || [];
-    const step = steps.find((s: any) => s.metadata?.transactionType === type);
+    const approvalStep = steps.find((s: any) => s.metadata?.transactionType === "approval");
 
-    if (!step || !step.txnData) {
-      toast.error(`No ${type} transaction found`);
+    if (!approvalStep || !approvalStep.txnData) {
+      toast.error("No approval transaction found");
       return;
     }
 
     try {
       setState(prev => ({ ...prev, isTxSubmitting: true }));
-
-      const txRequest = step.txnData;
+      toast.info("Step 1/2: Processing token approval...");
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          `3. Execute Same Chain Swap`,
-          `Step 3: Executing ${type} transaction
-          📍 This transaction executes the actual token swap. Make sure to review and confirm the transaction in your wallet (e.g., MetaMask) to proceed.`,
-          txRequest,
+          `2. Token Approval Required`,
+          `Step 2: Approving token spend
+        📍 This transaction allows the DEX to spend your tokens. You'll need to confirm this approval in your wallet first.`,
+          approvalStep.txnData,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
             resolve();
@@ -443,31 +455,107 @@ function SameChainTradePage() {
         );
       });
 
-      const hash = await walletClient.sendTransaction({
+      const approvalHash = await walletClient.sendTransaction({
         account: address,
-        to: txRequest.to,
-        data: txRequest.data,
-        value: txRequest.value ? BigInt(txRequest.value) : undefined,
-        gas: txRequest.gasLimit ? BigInt(txRequest.gasLimit) : undefined,
+        to: approvalStep.txnData.to,
+        data: approvalStep.txnData.data,
+        value: approvalStep.txnData.value ? BigInt(approvalStep.txnData.value) : undefined,
+        gas: approvalStep.txnData.gasLimit ? BigInt(approvalStep.txnData.gasLimit) : undefined,
         kzg: undefined,
         chain: undefined,
       });
 
-      toast.info(`${type} transaction submitted: ${hash}`);
+      toast.info(`Approval transaction submitted: ${approvalHash}`);
 
-      const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+      const approvalReceipt = await publicClient?.waitForTransactionReceipt({
+        hash: approvalHash
+      });
+
+      if (approvalReceipt?.status === 'success') {
+        toast.success("Token approval confirmed");
+        addToHistory("Approval Tx", approvalStep.txnData, approvalReceipt);
+        setLogs(prev => [...prev, "✔️ Token approval confirmed, proceeding to DEX swap."]);
+
+        // Small delay to ensure approval is fully processed
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Automatically proceed to DEX swap after successful approval
+        setState(prev => ({ ...prev, currentAction: "swap" }));
+      } else {
+        throw new Error("Approval transaction failed");
+      }
+
+    } catch (err) {
+      console.error("Failed to complete approval transaction:", err);
+      toast.error(`Approval failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setState(prev => ({ ...prev, isTxSubmitting: false }));
+    }
+    // Note: isTxSubmitting will be set to false in handleDex
+  };
+
+  const handleDex = async () => {
+    if (!state.routeResponse || !address || !walletClient) {
+      toast.error("Missing required data");
+      return;
+    }
+
+    const steps = state.routeResponse.steps || [];
+    const dexStep = steps.find((s: any) => s.metadata?.transactionType === "dex");
+
+    if (!dexStep || !dexStep.txnData) {
+      toast.error("No DEX transaction found");
+      return;
+    }
+
+    try {
+      // Only set isTxSubmitting if it's not already set (i.e., called directly, not from handleApproval)
+      if (!state.isTxSubmitting) {
+        setState(prev => ({ ...prev, isTxSubmitting: true }));
+      }
+
+      const hasApprovalStep = steps.some((s: any) => s.metadata?.transactionType === "approval");
+      toast.info(hasApprovalStep ? "Step 2/2: Executing token swap..." : "Executing token swap...");
+
+      await new Promise<void>((resolve) => {
+        openRequestModal(
+          `Execute Same Chain Swap`,
+          `Executing DEX transaction
+        📍 This transaction executes the actual token swap. Make sure to review and confirm the transaction in your wallet (e.g., MetaMask) to proceed.`,
+          dexStep.txnData,
+          async () => {
+            setState(prev => ({ ...prev, modalOpen: false }));
+            resolve();
+          }
+        );
+      });
+
+      const swapHash = await walletClient.sendTransaction({
+        account: address,
+        to: dexStep.txnData.to,
+        data: dexStep.txnData.data,
+        value: dexStep.txnData.value ? BigInt(dexStep.txnData.value) : undefined,
+        gas: dexStep.txnData.gasLimit ? BigInt(dexStep.txnData.gasLimit) : undefined,
+        kzg: undefined,
+        chain: undefined,
+      });
+
+      toast.info(`Swap transaction submitted: ${swapHash}`);
+
+      const swapReceipt = await publicClient?.waitForTransactionReceipt({
+        hash: swapHash
+      });
 
       await openResponseModal(
         `Transaction Complete`,
         `The token has been successfully swapped on the same chain. Below is the transaction receipt for your reference.`,
-        receipt
+        swapReceipt
       );
 
-      toast.success(`${type} transaction confirmed`);
-
-      addToHistory("Execute Swap Tx", txRequest, receipt);
-
+      toast.success("Swap transaction confirmed");
+      addToHistory("Execute Swap Tx", dexStep.txnData, swapReceipt);
       setState(prev => ({ ...prev, currentAction: "idle" }));
+      setLogs(prev => [...prev, "✔️ Swap transaction confirmed, same chain swap completed successfully."]);
+
       // Reset form after successful swap
       setState(prev => ({
         ...prev,
@@ -480,14 +568,20 @@ function SameChainTradePage() {
         routeResponse: null,
       }));
 
-
     } catch (err) {
-      console.error(`Failed to send ${type} transaction:`, err);
-      toast.error(`Failed to complete ${type} transaction`);
+      console.error("Failed to complete DEX transaction:", err);
+      toast.error(`Swap failed`);
+      setLogs(prev => [...prev, `❌ Swap failed`]);
+      setState(prev => ({
+        ...prev,
+        isTxSubmitting: false,
+        currentAction: "idle",
+      }));
     } finally {
       setState(prev => ({ ...prev, isTxSubmitting: false }));
     }
   };
+
 
   if (!isConnected) {
     return (
@@ -514,9 +608,9 @@ function SameChainTradePage() {
   const outputAmount = state.routeOutputAmount || state.quoteOutputAmount;
 
   const actionLabel = {
-    approve: "Execute Approval Tx",
+    approval: "Execute Approval Tx",
     swap: "Execute Swap Tx",
-    idle: "Get Best Route",
+    idle: "Execute",
     get_best_route: "Get Best Route",
     get_quote: "Getting Quote..",
   }[state.currentAction];
@@ -596,12 +690,12 @@ function SameChainTradePage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (state.currentAction === "approve") {
-            submitTransaction("approval");
+          if (state.currentAction === "approval") {
+            handleApproval();
           } else if (state.currentAction === "get_best_route") {
             handleGetBestRoute();
           } else if (state.currentAction === "swap") {
-            submitTransaction("dex");
+            handleDex();
           } else if (state.currentAction === "get_quote") {
             handleGetQuote();
           }
@@ -683,8 +777,12 @@ function SameChainTradePage() {
           </div>
         </div>
 
-        <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200">
-          <h1 className="font-semibold mb-1">ℹ️ Understanding Get Quote & Get Best Route</h1>
+        <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200 text-center">
+          <span>Refer to the diagram give below to understand the <strong>Same Chain Swap Flow using Okto Trade Service.</strong></span>
+          <img src={SameChainFlow} />
+        </div>
+
+        <CollapsibleCallout title="Understanding Get Quote & Get Best Route" variant="info" defaultOpen={false}>
           <p>
             → Using <strong>Get Quote</strong> is optional. It provides a faster API call to quickly estimate the output amount for your trade.
             <br />
@@ -692,10 +790,7 @@ function SameChainTradePage() {
             <br />
             → Read the <a className="text-indigo-400" href="https://docsv2.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
           </p>
-          <br />
-          <span>Here's the diagram explaining the <strong>Same Chain Swap Flow using Okto Trade Service:</strong></span>
-          <img src={SameChainFlow} />
-        </div>
+        </CollapsibleCallout>
 
         {outputAmount && (
           <div className="bg-gray-700 p-4 rounded-lg">
@@ -706,10 +801,12 @@ function SameChainTradePage() {
           </div>
         )}
 
-        <div className="flex gap-4">
+        <div className="flex gap-4 justify-center flex-wrap">
+          {!state.routeResponse && (
+            <>
           <button
             type="button"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+                className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${isDisabled
                 ? "bg-gray-600 cursor-not-allowed"
               : state.quoteOutputAmount || state.routeResponse
                 ? "bg-gray-600 text-gray-200"
@@ -728,7 +825,7 @@ function SameChainTradePage() {
 
           <button
             type="button"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${isDisabled
+                className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${isDisabled
               ? "bg-gray-600 cursor-not-allowed"
               : state.routeResponse
                 ? "bg-gray-600 text-gray-200"
@@ -744,54 +841,57 @@ function SameChainTradePage() {
                 : "Get Route"
             }
           </button>
+            </>)}
 
           <button
             type="submit"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${!state.routeResponse || isDisabled
+            className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${!state.routeOutputAmount
               ? "bg-gray-600 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+              : isDisabled
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
               }`}
-            disabled={!state.routeResponse || isDisabled}
+            disabled={isDisabled}
           >
-            {state.isTxSubmitting && (state.currentAction === "approve" || state.currentAction === "swap")
-              ? "Executing..."
-              : "Execute"
-            }
-          </button>
-
-          <button
-            type="button"
-            className="px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 transition font-medium"
-            onClick={() => {
-              setState(prev => ({
-                ...prev,
-                fromToken: null,
-                toToken: null,
-                amount: "",
-                quoteOutputAmount: null,
-                routeOutputAmount: null,
-                currentAction: "idle",
-                routeResponse: null,
-              }));
-            }}
-          >
-            Clear
+            {state.isTxSubmitting ? "Processing..." : actionLabel}
           </button>
         </div>
       </form>
-      <div className="mt-2 flex justify-center w-full">
+      <div className="mt-6 flex justify-end gap-6 w-full ">
         <button
           onClick={() => setIsHistoryOpen(true)}
-          className="bg-blue-600 mt-4 px-6 py-3 rounded hover:bg-blue-700 w-[300px] text-white font-medium transition"
+          className="text-sm text-indigo-400 hover:text-indigo-300 underline transition"
         >
           View Request/Response History
         </button>
-      </div>
+        <button
+          type="button"
+          onClick={() => {
+            setState(prev => ({
+              ...prev,
+              fromToken: null,
+              toToken: null,
+              amount: "",
+              quoteOutputAmount: null,
+              routeOutputAmount: null,
+              currentAction: "idle",
+              routeResponse: null,
+            }));
+            setLogs([]);
+            setHistory([]);
+            setIsHistoryOpen(false);
+          }}
+          className="px-5 py-2 rounded-full bg-red-700 hover:bg-red-600 text-gray-200 text-sm font-medium transition"
+        >
+          Clear
+        </button></div>
       <HistoryModal
         open={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
         history={history}
       />
+      {logs.length > 0 && (<StepIndicator logs={logs} />)}
+
     </div>
   );
 }
