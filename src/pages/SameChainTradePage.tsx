@@ -788,7 +788,7 @@ function SameChainTradePage() {
             <br />
             → <strong>Get Best Route</strong>, however, is mandatory for executing trades. It returns the optimal route along with all the steps required to complete the trade.
             <br />
-            → Read the <a className="text-indigo-400" href="https://docsv2.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
+            → Read the <a className="text-indigo-400" href="https://docs.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
           </p>
         </CollapsibleCallout>
 

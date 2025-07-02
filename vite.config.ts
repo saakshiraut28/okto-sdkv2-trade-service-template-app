@@ -1,9 +1,9 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from '@tailwindcss/vite';
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(() => {
 
   return {
     plugins: [react(), tailwindcss(), nodePolyfills()],
