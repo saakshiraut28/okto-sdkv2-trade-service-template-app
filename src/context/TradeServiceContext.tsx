@@ -7,20 +7,24 @@ type TradeServiceContextType = {
   setEnvironment: (value: string) => void;
 };
 
-const DEFAULT_SECRET = import.meta.env.VITE_TRADE_SERVICE_SANDBOX_API_KEY;
 const DEFAULT_ENV = "sandbox";
 
 const TradeServiceContext = createContext<TradeServiceContextType | undefined>(undefined);
 
 export const TradeServiceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [secret, setSecretState] = useState(DEFAULT_SECRET);
+  const [secret, setSecretState] = useState("");
   const [environment, setEnvironmentState] = useState(DEFAULT_ENV);
 
   useEffect(() => {
     const savedSecret = localStorage.getItem("TRADE_SERVICE_SECRET");
     const savedEnv = localStorage.getItem("TRADE_SERVICE_ENV");
-    if (savedSecret) setSecretState(savedSecret);
-    if (savedEnv) setEnvironmentState(savedEnv);
+
+    if (savedSecret) {
+      setSecretState(savedSecret);
+    }
+    if (savedEnv) {
+      setEnvironmentState(savedEnv);
+    }
   }, []);
 
   const setSecret = (value: string) => {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ethers } from "ethers";
@@ -28,8 +28,18 @@ import {
   registerIntent,
   getOrderDetails,
 } from "../api/tradeServiceClient";
+import HistoryModal from "../components/HistoryModal";
+import CollapsibleCallout from "../components/CollapsibleCallout";
+import StepIndicator from "../components/StepIndicatior";
+import { useTradeService } from "../context/TradeServiceContext";
 
 // Types
+interface HistoryEntry {
+  title: string;
+  requestPayload: any;
+  responsePayload: any;
+}
+
 interface CrossChainTradeState {
   environment: string;
   fromChain: string;
@@ -70,13 +80,17 @@ interface CrossChainTradeState {
 }
 
 function CrossChainTradePage() {
+  const { environment } = useTradeService();
   const { address, isConnected, chainId: connectedChainId } = useAccount();
   const { switchChain } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
-
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [logs, setLogs] = useState<string[]>(["Initializing cross-chain trade flow..."]);
+  const fstSupportedTokens = ["USDC"];
   const [state, setState] = React.useState<CrossChainTradeState>({
-    environment: "sandbox",
+    environment: environment,
     fromChain: "",
     toChain: "",
     fromToken: null,
@@ -102,6 +116,15 @@ function CrossChainTradePage() {
     registerIntentReq: null,
     registerIntentResponse: null,
   });
+
+  const isFstFlow = state.fromToken?.symbol === undefined || fstSupportedTokens.includes(state.fromToken?.symbol);
+
+  const addToHistory = (title: string, requestPayload: any, responsePayload: any) => {
+    setHistory((prev) => [
+      ...prev,
+      { title, requestPayload, responsePayload },
+    ]);
+  };
 
   // Get balance for from token
   const { data: balance } = useBalance({
@@ -270,12 +293,15 @@ function CrossChainTradePage() {
       console.log("Get Quote Response: ", quoteRes);
 
       await openRequestResponseModal(
-        "1. Get Quote Response",
-        `Step 1: Get Quote
+        "Get Quote Response",
+        `Get Quote
           📍Note: The 'Get Quote' request is optional and provides a quick estimate of the output amount. Use this step for faster previews without executing a full route calculation.`,
         quotePayload,
         quoteRes
       );
+
+      setLogs(prev => [...prev, "✔️ Quote obtained, proceeding to get best route"]);
+      addToHistory("Get Quote", quotePayload, quoteRes);
 
       const quoteOutputAmount = ethers.formatUnits(
         quoteRes.outputAmount,
@@ -357,6 +383,9 @@ function CrossChainTradePage() {
         routeRes
       );
 
+      setLogs(prev => [...prev, "✔️ Best route obtained, proceed to sign permit."]);
+      addToHistory("Get Best Route", quotePayload, routeRes);
+
       const routeOutputAmount = ethers.formatUnits(
         // @ts-ignore
         routeRes.outputAmount,
@@ -407,9 +436,8 @@ function CrossChainTradePage() {
         });
 
         console.log("After Permit signature set the current Action state to generate_call_data");
-
         toast.info("Permit signature obtained, proceeding to generate call data");
-
+        setLogs(prev => [...prev, "✔️ Permit signature obtained, proceeding to generate call data"]);
         setState(prev => ({
           ...prev,
           currentAction: "generate_call_data",
@@ -417,9 +445,8 @@ function CrossChainTradePage() {
           permitData: permitData,
         }));
       } else {
-
         toast.info("No permit signature required, proceeding to generate call data");
-
+        setLogs(prev => [...prev, "✔️ No permit signature required, proceeding to generate call data"]);
         console.log("without Permit signature set the current Action state to generate_call_data");
         setState(prev => ({ ...prev, currentAction: "generate_call_data" }));
       }
@@ -484,14 +511,21 @@ function CrossChainTradePage() {
         callDataRes
       );
 
+      setLogs(prev => [...prev, "✔️ Call data generated, proceeding to approval if required"]);
+      addToHistory("Generate Call Data", callDataPayload, callDataRes);
+
       const approvalStep = callDataRes?.steps?.find(
         (s) => s.metadata?.transactionType === "approval"
       );
 
       if (approvalStep) {
+        toast.info("Approval step found, proceeding to approval");
         console.log("Approval step found, setting current action to approval");
+        setLogs(prev => [...prev, "✔️ Approval step found, proceeding to approval"]);
         setState(prev => ({ ...prev, currentAction: "approval" }));
         return;
+      } else {
+        toast.info("No approval step found, proceeding to next step");
       }
 
       const nextBridgeStep = callDataRes?.steps?.find(
@@ -509,9 +543,11 @@ function CrossChainTradePage() {
 
       if (transactionType === "init") {
         console.log("after call data if txn type is 'init' set current action state to init_bridge_txn");
+        setLogs(prev => [...prev, "✔️ Approval not needed, proceeding to initialize bridge transaction"]);
         setState(prev => ({ ...prev, currentAction: "init_bridge_txn" }));
       } else if (!transactionType) {
         console.log("after call data if txn type is not available set current action state to register_intent");
+        setLogs(prev => [...prev, "✔️ Approval not needed, proceeding to register intent"]);
         setState(prev => ({ ...prev, currentAction: "register_intent" }));
       } else {
         toast.error("Unknown bridge transaction type");
@@ -578,6 +614,8 @@ function CrossChainTradePage() {
         receipt
       );
 
+      addToHistory("Approval Transaction", txRequest, receipt);
+
       toast.success("Approval transaction confirmed");
 
       // Determine next step after approval
@@ -603,9 +641,11 @@ function CrossChainTradePage() {
       if (metaData.serviceType === "bridge") {
         if (metaData.transactionType === "init") {
           console.log("After approval, moving to init_bridge_txn");
+          setLogs(prev => [...prev, "✔️ Approval transaction confirmed, proceeding to execute init txn"]);
           setState(prev => ({ ...prev, currentAction: "init_bridge_txn" }));
         } else if (!metaData.transactionType) {
           console.log("After approval, moving to register_intent");
+          setLogs(prev => [...prev, "✔️ Approval transaction confirmed, proceeding to execute sign order data"]);
           setState(prev => ({ ...prev, currentAction: "register_intent" }));
         } else {
           toast.error("Unknown transaction type after approval");
@@ -682,10 +722,11 @@ function CrossChainTradePage() {
         "Save the txn receipt",
         receipt
       );
+
+      setLogs(prev => [...prev, "✔️ Bridge transaction confirmed."]);
+      addToHistory("Bridge Transaction", txRequest, receipt);
       console.log("End of the flow init_bridge_txn flow");
-
       toast.success("Bridge transaction confirmed");
-
       setState((prev) => ({ ...prev, currentAction: "idle" }));
     } catch (err) {
       console.error("Failed to send bridge transaction:", err);
@@ -728,6 +769,7 @@ function CrossChainTradePage() {
           method: 'eth_signTypedData_v4',
           params,
         });
+        setLogs(prev => [...prev, "✔️ Order signature obtained, proceeding to register intent"]);
       } catch (err) {
         toast.error("Signing failed");
         console.error(err);
@@ -776,11 +818,10 @@ function CrossChainTradePage() {
         "Step 5: Cross-chain order registered",
         intentRes
       );
+      addToHistory("Register Intent", registerPayload, intentRes);
       console.log("Register Intent Response: ", intentRes);
-
-      // Reset form after successful trade
+      setLogs(prev => [...prev, "✔️ Cross-chain order registered successfully, proceeding to get order details"]);
       setState(prev => ({ ...prev, currentAction: "get_order_details", isTxSubmitting: false }));
-
     } catch (err) {
       console.error("Failed to register intent:", err);
       toast.error("Failed to register intent");
@@ -817,6 +858,7 @@ function CrossChainTradePage() {
       // @ts-ignore
       const orderDetailsRes = await getOrderDetails(state.environment, orderDetailsPayload);
       console.log("Get Order Details Response: ", orderDetailsRes);
+      addToHistory("Get Order Details", orderDetailsPayload, orderDetailsRes);
 
       await openRequestResponseModal(
         "Get Order Details Response",
@@ -825,7 +867,7 @@ function CrossChainTradePage() {
         orderDetailsRes
       );
       toast.success("Cross-chain trade completed successfully!");
-
+      setLogs(prev => [...prev, "✔️ Order details retrieved successfully. Trade completed!"]);
       setState(prev => ({ ...prev, currentAction: "idle", isTxSubmitting: false }));
 
     } catch (err) {
@@ -961,12 +1003,6 @@ function CrossChainTradePage() {
             balance={balance?.formatted}
           />
 
-          {balance && (
-            <p className="text-sm text-gray-400">
-              Balance: {balance.formatted} {balance.symbol}
-            </p>
-          )}
-
           <ChainSelect
             label="To Chain (Destination)"
             value={state.toChain}
@@ -1013,27 +1049,43 @@ function CrossChainTradePage() {
             <input
               type="text"
               placeholder="0x... or leave blank to use your wallet"
-              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-1 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={state.toUserWalletAddress || ""}
               onChange={(e) => setState(prev => ({ ...prev, toUserWalletAddress: e.target.value }))}
             />
           </div>
         </div>
 
-        <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200">
-          <h1 className="font-semibold mb-1">ℹ️ Understanding Get Quote & Get Best Route</h1>
+        <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200 text-center mx-auto">
+          <span>
+            Refer to the diagram below to understand the{" "}
+            <strong>Cross Chain Swap Flow using Okto Trade Service.</strong>
+          </span>
+
+          {isFstFlow ? (
+            <img
+              src={CrossChainFlow}
+              alt="Cross Chain FST Flow"
+              className="mt-3 mr-2 mx-auto max-w-[900px] w-auto h-auto"
+            />
+          ) : (
+            <img
+              src={CrossChainFlowNfst}
+              alt="Cross Chain NFST Flow"
+              className="mt-3 mx-auto max-w-[900px] w-auto h-auto"
+            />
+          )}
+        </div>
+
+        <CollapsibleCallout title="Understanding Get Quote & Get Best Route" variant="info" defaultOpen={false}>
           <p>
             → Using <strong>Get Quote</strong> is optional. It provides a faster API call to quickly estimate the output amount for your trade.
             <br />
             → <strong>Get Best Route</strong>, however, is mandatory for executing trades. It returns the optimal route along with all the steps required to complete the trade.
             <br />
-            → Read the <a className="text-indigo-400" href="https://docsv2.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
+            → Read the <a className="text-indigo-400" href="https://docs.okto.tech/docs/trade-service" target="_blank">Trade Service Guide</a> for more details on how to use these APIs effectively.
           </p>
-          <br />
-          <span>Here's the diagram explaining the <strong>Cross Chain Swap Flow using Okto Trade Service:</strong></span>
-          <img src={CrossChainFlow} />
-          <img src={CrossChainFlowNfst} className="mt-1" />
-        </div>
+        </CollapsibleCallout>
 
           {outputAmount && state.fromChain !== state.toChain && (
             <div className="bg-gray-700 p-4 rounded-lg">
@@ -1047,52 +1099,52 @@ function CrossChainTradePage() {
             </div>
           )}
 
-          <div className="flex gap-4">
-          <button
-            type="button"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.quoteOutputAmount || state.routeOutputAmount
-              ? "bg-gray-600 cursor-not-allowed"
-              : isDisabled
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            disabled={isDisabled}
-            onClick={() => {
-              handleGetQuote();
-            }}
-          >
-            {state.isTxSubmitting && state.currentAction === "get_quote"
-              ? "Getting Quote..."
-              : state.quoteOutputAmount || state.routeOutputAmount
-                ? "Proceed with Get Best Route →"
-                : "Get Quote"
-            }
-          </button>
+        <div className="flex gap-4 justify-center flex-wrap">
+          {!state.routeResponse && (
+            <>
+              <button
+                type="button"
+                className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${state.quoteOutputAmount || state.routeOutputAmount
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : isDisabled
+                    ? "bg-gray-600 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                disabled={isDisabled}
+                onClick={handleGetQuote}
+              >
+                {state.isTxSubmitting && state.currentAction === "get_quote"
+                  ? "Getting Quote..."
+                  : state.quoteOutputAmount || state.routeOutputAmount
+                    ? "Proceed with Get Best Route →"
+                    : "Get Quote"
+                }
+              </button>
 
-          <button
-            type="button"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${state.routeOutputAmount
-              ? "bg-gray-600 cursor-not-allowed"
-              : isDisabled
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            disabled={isDisabled}
-            onClick={() => {
-              handleGetBestRoute();
-            }}
-          >
-            {state.isTxSubmitting && state.currentAction === "get_best_route"
-              ? "Getting Route Info..."
-              : state.routeOutputAmount
-                ? "Proceed with Accept Trade →"
-                : "Get Best Route"
-            }
-          </button>
+              <button
+                type="button"
+                className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${state.routeOutputAmount
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : isDisabled
+                    ? "bg-gray-600 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                disabled={isDisabled}
+                onClick={handleGetBestRoute}
+              >
+                {state.isTxSubmitting && state.currentAction === "get_best_route"
+                  ? "Getting Route Info..."
+                  : state.routeOutputAmount
+                    ? "Proceed with Sign Permit Data →"
+                    : "Get Best Route"
+                }
+              </button>
+            </>
+          )}
 
           <button
             type="submit"
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition ${!state.routeOutputAmount
+            className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${!state.routeOutputAmount
               ? "bg-gray-600 cursor-not-allowed"
               : isDisabled
                 ? "bg-gray-600 cursor-not-allowed"
@@ -1101,29 +1153,46 @@ function CrossChainTradePage() {
             disabled={isDisabled}
           >
             {state.isTxSubmitting ? "Processing..." : actionLabel}
-          </button>    
-
-            <button
-            type="button"
-            className="px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 transition font-medium"
-            onClick={() => {
-              setState(prev => ({
-                ...prev,
-                fromToken: null,
-                fromChain: "",
-                toChain: "",
-                amount: "",
-                quoteOutputAmount: null,
-                routeOutputAmount: null,
-                currentAction: "idle",
-                routeResponse: null,
-              }));
-            }}
-          >
-            Clear
           </button>
-          </div>
-        </form>
+        </div>
+
+      </form>
+      <div className="mt-6 flex justify-end gap-6 w-full ">
+        <button
+          onClick={() => setIsHistoryOpen(true)}
+          className="text-sm text-indigo-400 hover:text-indigo-300 underline transition"
+        >
+          View Request/Response History
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setState(prev => ({
+              ...prev,
+              fromToken: null,
+              fromChain: "",
+              toChain: "",
+              amount: "",
+              quoteOutputAmount: null,
+              routeOutputAmount: null,
+              currentAction: "idle",
+              routeResponse: null,
+            }));
+            setLogs([]);
+            setHistory([]);
+            setIsHistoryOpen(false);
+          }}
+          className="px-5 py-2 rounded-full bg-red-700 hover:bg-red-600 text-gray-200 text-sm font-medium transition"
+        >
+          Clear
+        </button>
+      </div>
+      <HistoryModal
+        open={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={history}
+      />
+      {logs.length > 0 && (<StepIndicator logs={logs} />)}
       </div>
   );
 }

@@ -38,9 +38,13 @@ export const tradeServiceProductionClient = axios.create({
 
 tradeServiceSandboxClient.interceptors.request.use((config) => {
   const storedSecret = localStorage.getItem("TRADE_SERVICE_SECRET");
-  const defaultSecret = import.meta.env.VITE_TRADE_SERVICE_SANDBOX_API_KEY;
 
-  config.headers["X-Api-Key"] = storedSecret || defaultSecret;
+  if (!storedSecret) {
+    console.error("Trade Service secret is missing in localStorage!");
+    throw new Error("Trade Service secret is missing. Please set it in the app before trading.");
+  }
 
+  config.headers["X-Api-Key"] = storedSecret;
+  console.log("Using X-Api-Key:", storedSecret);
   return config;
 });

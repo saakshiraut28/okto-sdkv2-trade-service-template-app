@@ -28,7 +28,7 @@ const AmountInput: FC<AmountInputProps> = ({
         <input
           type="number"
           inputMode="decimal"
-          className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-1 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           placeholder="Enter amount"
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -40,7 +40,7 @@ const AmountInput: FC<AmountInputProps> = ({
         {onMaxClick && (
           <button
             type="button"
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+            className="text-xs bg-gray-700 text-white px-2 py-0.5 rounded-xl hover:bg-blue-800 transition"
             onClick={onMaxClick}
             disabled={disabled || !balance}
           >
@@ -48,6 +48,11 @@ const AmountInput: FC<AmountInputProps> = ({
           </button>
         )}
       </div>
+      {tokenSymbol && (
+        <div className="mt-2 text-sm text-gray-400">
+          Balance: {balance ? `${balance} ${tokenSymbol}` : "Loading..."}
+        </div>
+      )}
     </div>
   );
 };

@@ -44,7 +44,7 @@ export const CAIP_TO_NATIVE_SYMBOL: Record<string, string> = {
   "eip155:1": "ETH",
   "eip155:56": "BNB",
   "eip155:137": "POL",
-  "eip155:8453": "BASE",
+  "eip155:8453": "ETH",
   "eip155:42161": "ETH",
   "eip155:10": "ETH",
   "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "SOL",

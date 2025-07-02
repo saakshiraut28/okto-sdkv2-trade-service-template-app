@@ -11,15 +11,9 @@ interface RequestResponseModalProps {
   responsePayload?: any;
   isRequest?: boolean;
   onConfirm?: () => Promise<any>;
-  onCancel?: () => void; // Add this new prop
+  onCancel?: () => void;
 }
-
-export function stringifySafe(obj: any, spacing = 2) {
-  return JSON.stringify(obj, (_key, value) =>
-    typeof value === "bigint" ? value.toString() : value,
-    spacing
-  );
-}
+import { stringifySafe } from "../utils/stringifySafe";
 
 const RequestResponseModal: React.FC<RequestResponseModalProps> = ({
   open,
