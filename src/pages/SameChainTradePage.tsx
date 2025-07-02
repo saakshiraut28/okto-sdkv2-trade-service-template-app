@@ -277,8 +277,8 @@ function SameChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "1. Get Quote Request",
-          `Step 1: Get Quote Request
+          "Get Quote Request",
+          `Get Quote Request
           📍Note: The 'Get Quote' request is optional and provides a quick estimate of the output amount. Use this step for faster previews without executing a full route calculation.`,
           quotePayload,
           async () => {
@@ -292,8 +292,8 @@ function SameChainTradePage() {
       console.log("Get Quote Response: ", quoteRes);
 
       await openRequestResponseModal(
-        "1. Get Quote Response",
-        `Step 1: Get Quote
+        "Get Quote Response",
+        `Get Quote
           📍Note: The 'Get Quote' request is optional and provides a quick estimate of the output amount. Use this step for faster previews without executing a full route calculation.`,
         quotePayload,
         quoteRes
@@ -352,8 +352,8 @@ function SameChainTradePage() {
       // Get best route
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "2. Get Best Route Request",
-          `Step 2: Get Best Route Request  
+          "Get Best Route Request",
+          `Get Best Route Request
         📍 This response provides the most optimized route for your swap, along with the exact steps required to execute the trade across the involved chains and protocols.`,
           quotePayload,
           async () => {
@@ -367,8 +367,8 @@ function SameChainTradePage() {
       console.log("Get Best Route Response: ", routeRes);
 
       await openRequestResponseModal(
-        "2. Get Best Route Response",
-        `Step 2: Get Best Route  
+        "Get Best Route Response",
+        `Get Best Route
         📍 This response provides the most optimized route for your swap, along with the exact steps required to execute the trade across the involved chains and protocols.`,
         quotePayload,
         routeRes
@@ -440,12 +440,12 @@ function SameChainTradePage() {
 
     try {
       setState(prev => ({ ...prev, isTxSubmitting: true }));
-      toast.info("Step 1/2: Processing token approval...");
+      toast.info("Processing token approval...");
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          `2. Token Approval Required`,
-          `Step 2: Approving token spend
+          `Token Approval Required`,
+          `Approving token spend
         📍 This transaction allows the DEX to spend your tokens. You'll need to confirm this approval in your wallet first.`,
           approvalStep.txnData,
           async () => {
@@ -514,7 +514,7 @@ function SameChainTradePage() {
       }
 
       const hasApprovalStep = steps.some((s: any) => s.metadata?.transactionType === "approval");
-      toast.info(hasApprovalStep ? "Step 2/2: Executing token swap..." : "Executing token swap...");
+      toast.info(hasApprovalStep ? "Executing token swap..." : "Executing token swap...");
 
       await new Promise<void>((resolve) => {
         openRequestModal(

@@ -32,6 +32,7 @@ import HistoryModal from "../components/HistoryModal";
 import CollapsibleCallout from "../components/CollapsibleCallout";
 import StepIndicator from "../components/StepIndicatior";
 import { useTradeService } from "../context/TradeServiceContext";
+import { extractOrderIdFromReceipt } from "../utils/extractOrderId";
 
 // Types
 interface HistoryEntry {
@@ -77,6 +78,7 @@ interface CrossChainTradeState {
   callDataResponse: any | null;
   registerIntentReq: any | null;
   registerIntentResponse: any | null;
+  orderId?: `0x${string}` | string;
 }
 
 function CrossChainTradePage() {
@@ -115,6 +117,7 @@ function CrossChainTradePage() {
     callDataResponse: null,
     registerIntentReq: null,
     registerIntentResponse: null,
+    orderId: "",
   });
 
   const isFstFlow = state.fromToken?.symbol === undefined || fstSupportedTokens.includes(state.fromToken?.symbol);
@@ -278,8 +281,8 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "1. Get Quote Request",
-          `Step 1: Get Quote Request
+          "Get Quote Request",
+          `Get Quote Request
           📍Note: The 'Get Quote' request is optional and provides a quick estimate of the output amount. Use this step for faster previews without executing a full route calculation.`,
           quotePayload,
           async () => {
@@ -362,8 +365,8 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "2. Get Best Route Request",
-          `Step 2: Get Best Route Request  
+          "Get Best Route Request",
+          `Get Best Route Request
         📍 This response provides the most optimized route for your swap, along with the exact steps required to execute the trade across the involved chains and protocols.`,
           quotePayload,
           async () => {
@@ -376,8 +379,8 @@ function CrossChainTradePage() {
       const routeRes = await getBestRoute(state.environment, quotePayload);
 
       await openRequestResponseModal(
-        "2. Get Best Route Response",
-        `Step 2: Get Best Route  
+        "Get Best Route Response",
+        `Get Best Route
         📍 This response provides the most optimized route for your swap, along with the exact steps required to execute the trade across the involved chains and protocols.`,
         quotePayload,
         routeRes
@@ -488,8 +491,8 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "3. Generate Call Data Request",
-          `Step 3: Generating transaction call data
+          "Generate Call Data Request",
+          `Generating transaction call data
         📍 This generates the call data for trade.`,
           callDataPayload,
           async () => {
@@ -504,8 +507,8 @@ function CrossChainTradePage() {
       setState(prev => ({ ...prev, callDataResponse: callDataRes }));
 
       await openRequestResponseModal(
-        "3. Generate Call Data Response",
-        `Step 2: Generate the Call data response
+        "Generate Call Data Response",
+        `Generating the Call data response
         📍 This response provides generated call data for cross chain trade.`,
         callDataPayload,
         callDataRes
@@ -583,8 +586,8 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "4. Approval Transaction",
-          `Step 4: Approving token spend
+          "Approval Transaction",
+          `Approving token spend
       📍 This approves the bridge contract to spend your tokens.`,
           txRequest,
           async () => {
@@ -692,8 +695,8 @@ function CrossChainTradePage() {
 
       await new Promise<void>((resolve) => {
         openRequestModal(
-          "4. Calling Bridge Transaction",
-          `Step 4: Generating transaction call data
+          "Calling Bridge Transaction",
+          `Generating transaction call data
         📍 This generates the call data for bridge transaction.`,
           txRequest,
           async () => {
@@ -725,9 +728,21 @@ function CrossChainTradePage() {
 
       setLogs(prev => [...prev, "✔️ Bridge transaction confirmed."]);
       addToHistory("Bridge Transaction", txRequest, receipt);
+
+      console.log("Extract the order id from the receipt");
+      const orderId = extractOrderIdFromReceipt(receipt);
+      if (!orderId) {
+        toast.error("Failed to extract order ID from receipt");
+        setState((prev) => ({ ...prev, currentAction: "idle" }));
+        return;
+      }
+      setState((prev) => ({ ...prev, orderId: orderId }));
+      console.log("Order ID extracted: ", orderId);
+      setLogs(prev => [...prev, "✔️ Order Id extracted, proceeding with get order details."]);
+
       console.log("End of the flow init_bridge_txn flow");
       toast.success("Bridge transaction confirmed");
-      setState((prev) => ({ ...prev, currentAction: "idle" }));
+      setState((prev) => ({ ...prev, currentAction: "get_order_details" }));
     } catch (err) {
       console.error("Failed to send bridge transaction:", err);
       toast.error("Failed to complete bridge transaction");
@@ -800,7 +815,7 @@ function CrossChainTradePage() {
       await new Promise<void>((resolve) => {
         openRequestModal(
           "Register Intent Request",
-          "Step 5: Registering cross-chain intent",
+          "Registering cross-chain intent",
           registerPayload,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
@@ -815,11 +830,12 @@ function CrossChainTradePage() {
 
       await openResponseModal(
         "Register Intent Response",
-        "Step 5: Cross-chain order registered",
+        "Cross-chain order registered",
         intentRes
       );
       addToHistory("Register Intent", registerPayload, intentRes);
       console.log("Register Intent Response: ", intentRes);
+      setState(prev => ({ ...prev, orderId: intentRes }));
       setLogs(prev => [...prev, "✔️ Cross-chain order registered successfully, proceeding to get order details"]);
       setState(prev => ({ ...prev, currentAction: "get_order_details", isTxSubmitting: false }));
     } catch (err) {
@@ -829,24 +845,26 @@ function CrossChainTradePage() {
     }
   };
 
-  const handleGetOrderDetails = async () => {
-    console.log("Get Order Details called");
-    if (!state.registerIntentResponse || !address) {
-      toast.error("Missing register intent data needed for fetching order details");
+  const handleGetOrderDetails = async (orderId: string) => {
+    console.log("Get Order Details called with orderId:", orderId);
+
+    if (!orderId || !state.fromChain) {
+      toast.error("Missing orderId or chain information for fetching order details");
       return;
     }
 
+    const orderDetailsPayload = {
+      orderId,
+      caipId: state.fromChain,
+    };
+
     try {
-      const orderDetailsPayload = {
-        orderId: state.registerIntentResponse,
-        caipId: state.fromChain,
-      };
-      console.log("Order Details Payload: ", orderDetailsPayload);
+      console.log("Order Details Payload:", orderDetailsPayload);
 
       await new Promise<void>((resolve) => {
         openRequestModal(
           "Get Order Details Request",
-          "Step 6: Getting order details",
+          "Get Order Details",
           orderDetailsPayload,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
@@ -857,24 +875,32 @@ function CrossChainTradePage() {
 
       // @ts-ignore
       const orderDetailsRes = await getOrderDetails(state.environment, orderDetailsPayload);
-      console.log("Get Order Details Response: ", orderDetailsRes);
+      console.log("Get Order Details Response:", orderDetailsRes);
+
       addToHistory("Get Order Details", orderDetailsPayload, orderDetailsRes);
 
       await openRequestResponseModal(
         "Get Order Details Response",
-        "Step 6: Order details retrieved",
+        "Order details retrieved",
         orderDetailsPayload,
         orderDetailsRes
       );
-      toast.success("Cross-chain trade completed successfully!");
-      setLogs(prev => [...prev, "✔️ Order details retrieved successfully. Trade completed!"]);
-      setState(prev => ({ ...prev, currentAction: "idle", isTxSubmitting: false }));
+
+      toast.success("Order details retrieved successfully!");
+      setLogs(prev => [...prev, "✔️ Order details retrieved successfully!"]);
+      setState(prev => ({
+        ...prev,
+        currentAction: "idle",
+        isTxSubmitting: false,
+      }));
 
     } catch (err) {
       console.error("Failed to get order details:", err);
       toast.error("Failed to get order details");
     }
-  }
+  };
+
+
 
   if (!isConnected) {
     return (
@@ -957,7 +983,7 @@ function CrossChainTradePage() {
             } else if (state.currentAction === "get_best_route") {
               handleGetBestRoute();
             } else if (state.currentAction === "get_order_details") {
-              handleGetOrderDetails();
+              handleGetOrderDetails(state.orderId);
             }
           }}
           className="space-y-6"
