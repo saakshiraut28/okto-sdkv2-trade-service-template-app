@@ -4,25 +4,23 @@ import { useTradeService } from "../context/TradeServiceContext";
 function TradeServiceSecret() {
     const { secret, environment, setSecret, setEnvironment } = useTradeService();
     const [userInput, setUserInput] = useState("");
-    const isCustomSecretSet = secret !== import.meta.env.VITE_TRADE_SERVICE_SANDBOX_API_KEY;
 
     const handleSave = () => {
         if (userInput.trim()) {
             setSecret(userInput.trim());
-        } else {
-            localStorage.removeItem("TRADE_SERVICE_SECRET");
-            setSecret(import.meta.env.VITE_TRADE_SERVICE_SANDBOX_API_KEY);
+            setUserInput("");
         }
-        setUserInput("");
     };
 
     return (
         <div className="bg-gray-800 text-white p-2 rounded-sm shadow-md my-4 border border-gray-700 w-full">
-            <h2 className="text-md font-semibold mb-4 text-white">Enter your API secret key, or use default.</h2>
+            <h2 className="text-md font-semibold mb-4 text-white">
+                Enter your Trade Service API Secret Key to use the app.
+            </h2>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
                 <input
-                    type="password"
+                    type="text"
                     value={userInput}
                     placeholder="<okto_trade_service_secret>"
                     onChange={(e) => setUserInput(e.target.value)}
@@ -30,9 +28,24 @@ function TradeServiceSecret() {
                 />
                 <button
                     onClick={handleSave}
-                    className="bg-indigo-600 hover:bg-indigo-500 px-5 py-2 rounded-lg text-sm font-medium transition"
+                    disabled={!userInput.trim()}
+                    className={`px-5 py-2 text-sm font-medium transition rounded-full ${userInput.trim()
+                        ? "bg-indigo-600 hover:bg-indigo-500"
+                        : "bg-gray-600 cursor-not-allowed"
+                        }`}
                 >
-                    {userInput.trim() ? "Save Secret" : "Use Default"}
+                    Save Secret
+                </button>
+                <button
+                    onClick={() => {
+                        setSecret("");
+                        setUserInput("");
+                        localStorage.removeItem("TRADE_SERVICE_SECRET");
+                        localStorage.removeItem("TRADE_SERVICE_ENVIRONMENT");
+                    }}
+                    className="px-5 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 transition rounded-full"
+                >
+                    Reset
                 </button>
             </div>
 
@@ -57,10 +70,10 @@ function TradeServiceSecret() {
 
             <p className="text-sm text-gray-400">
                 <span className="font-medium text-white">Current Secret:</span>{" "}
-                {isCustomSecretSet ? (
-                    <span className="text-blue-400">Your Trade Service secret will be used.</span>
+                {secret ? (
+                    <span className="text-green-400 font-bold">Trade Service Secret key is set and ready to use.</span>
                 ) : (
-                        <span className="text-blue-400">No Trade Service secret provided. Using the default secret.</span>
+                        <span className="text-red-400">No secret key set. Please enter your secret key to use the app.</span>
                 )}
             </p>
         </div>
