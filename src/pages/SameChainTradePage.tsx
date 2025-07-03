@@ -634,7 +634,7 @@ function SameChainTradePage() {
               <div className="absolute right-0 top-6 z-10 w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3">
                 <div className="text-sm text-gray-200">
                   <span className="text-md text-gray-200 font-normal">
-                    Trade Service only works on mainnet. For more information on chains and tokens supported by Okto Trade Service; check{" "}
+                    Okto's Trade Service only supports mainnet. For more information on the chains and tokens supported by the Trade Service, check{" "}
                     <a
                       className="text-indigo-400 hover:text-indigo-300"
                       href="https://docs.okto.tech/docs/trade-service/supported-networks-tokens"
@@ -769,7 +769,7 @@ function SameChainTradePage() {
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="0x... or leave blank to use your wallet"
+              placeholder="0x... or leave blank to use your current connected wallet"
               className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-1 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={state.toUserWalletAddress || ""}
               onChange={(e) => setState(prev => ({ ...prev, toUserWalletAddress: e.target.value }))}

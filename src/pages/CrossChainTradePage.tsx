@@ -1074,7 +1074,7 @@ function CrossChainTradePage() {
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="0x... or leave blank to use your wallet"
+              placeholder="0x... or leave blank to use your current connect wallet"
               className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-1 text-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={state.toUserWalletAddress || ""}
               onChange={(e) => setState(prev => ({ ...prev, toUserWalletAddress: e.target.value }))}

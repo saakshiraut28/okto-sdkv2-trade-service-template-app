@@ -10,7 +10,7 @@ const Navbar = () => {
           <img src={okto} className="w-10 h-10" />
         </div>
         <div className="absolute left-1/2 transform -translate-x-1/2 text-lg font-semibold flex items-center gap-3">
-          Okto Trade Service API Demo
+          Okto Trade Service API Demo and Degugging Tool
         </div>
         <div className="flex">
           <a className="underline hover:text-indigo-400 mx-2" href="https://github.com/okto-hq/okto-sdkv2-trade-service-template-app" target="_blank" title="Link to Github Repository"><Github className="w-10 h-10 p-2 rounded-full bg-gray-800 hover:bg-gray-300" /></a>

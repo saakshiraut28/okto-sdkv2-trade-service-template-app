@@ -43,7 +43,7 @@ function TradePage() {
                   className={`px-4 py-1 rounded-full text-sm font-medium transition-all duration-200 ${showSameChain ? "bg-blue-600 text-white" : "text-gray-300"
                     }`}
                 >
-                  Same Chain
+                  Same Chain Swap
                 </button>
                 <button
                   onClick={() => {
@@ -53,7 +53,7 @@ function TradePage() {
                   className={`px-4 py-1 rounded-full text-sm font-medium transition-all duration-200 ${showCrossChain ? "bg-purple-600 text-white" : "text-gray-300"
                     }`}
                 >
-                  Cross Chain
+                  Cross Chain Swap
                 </button>
               </div>
             </div>
