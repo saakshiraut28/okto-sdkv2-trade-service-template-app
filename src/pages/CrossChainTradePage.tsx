@@ -31,6 +31,7 @@ import {
 import HistoryModal from "../components/HistoryModal";
 import CollapsibleCallout from "../components/CollapsibleCallout";
 import StepIndicator from "../components/StepIndicatior";
+import OrderStatusPolling from "../components/OrderStatusPolling";
 import { useTradeService } from "../context/TradeServiceContext";
 import { extractOrderIdFromReceipt } from "../utils/extractOrderId";
 
@@ -943,7 +944,7 @@ function CrossChainTradePage() {
   return (
     <div className="my-4">
 
-        <RequestResponseModal
+      <RequestResponseModal
         open={state.modalOpen}
         onClose={() => {
           setState(prev => ({ ...prev, modalOpen: false }));
@@ -965,95 +966,95 @@ function CrossChainTradePage() {
         }
       />
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (state.currentAction === "accept") {
-              handleAccept();
-            } else if (state.currentAction === "approval") {
-              handleApproval();
-            } else if (state.currentAction === "generate_call_data") {
-              handleGenerateCallData();
-            } else if (state.currentAction === "init_bridge_txn") {
-              handleInitBridgeTransaction();
-            } else if (state.currentAction === "register_intent") {
-              handleRegisterIntent();
-            } else if (state.currentAction === "get_quote") {
-              handleGetQuote();
-            } else if (state.currentAction === "get_best_route") {
-              handleGetBestRoute();
-            } else if (state.currentAction === "get_order_details") {
-              handleGetOrderDetails(state.orderId);
-            }
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (state.currentAction === "accept") {
+            handleAccept();
+          } else if (state.currentAction === "approval") {
+            handleApproval();
+          } else if (state.currentAction === "generate_call_data") {
+            handleGenerateCallData();
+          } else if (state.currentAction === "init_bridge_txn") {
+            handleInitBridgeTransaction();
+          } else if (state.currentAction === "register_intent") {
+            handleRegisterIntent();
+          } else if (state.currentAction === "get_quote") {
+            handleGetQuote();
+          } else if (state.currentAction === "get_best_route") {
+            handleGetBestRoute();
+          } else if (state.currentAction === "get_order_details") {
+            handleGetOrderDetails(state.orderId);
+          }
+        }}
+        className="space-y-6"
+      >
+        <ChainSelect
+          label="From Chain (Source)"
+          value={state.fromChain}
+          disabled={false}
+          allowedChains={Object.keys(CAIP_TO_NAME).filter(id => id.startsWith("eip155"))}
+          onChange={handleFromChainChange}
+        />
+
+        <TokenInput
+          chainId={state.fromChain}
+          label="From Token"
+          disabled={!state.fromChain}
+          onValidToken={(address, symbol, decimals, isNative) => {
+            setState(prev => ({
+              ...prev,
+              fromToken: { address, symbol, decimals, isNative },
+              quoteOutputAmount: null,
+              routeOutputAmount: null,
+              currentAction: "idle",
+              routeResponse: null,
+            }));
           }}
-          className="space-y-6"
-        >
-          <ChainSelect
-            label="From Chain (Source)"
-            value={state.fromChain}
-            disabled={false}
-            allowedChains={Object.keys(CAIP_TO_NAME).filter(id => id.startsWith("eip155"))}
-            onChange={handleFromChainChange}
-          />
+        />
 
-          <TokenInput
-            chainId={state.fromChain}
-            label="From Token"
-            disabled={!state.fromChain}
-            onValidToken={(address, symbol, decimals, isNative) => {
-              setState(prev => ({
-                ...prev,
-                fromToken: { address, symbol, decimals, isNative },
-                quoteOutputAmount: null,
-                routeOutputAmount: null,
-                currentAction: "idle",
-                routeResponse: null,
-              }));
-            }}
-          />
+        <AmountInput
+          value={state.amount}
+          onChange={(val) => {
+            setState(prev => ({
+              ...prev,
+              amount: val,
+              quoteOutputAmount: null,
+              routeOutputAmount: null,
+              currentAction: "idle",
+              routeResponse: null,
+            }));
+          }}
+          onMaxClick={() => balance && setState(prev => ({ ...prev, amount: balance.formatted }))}
+          tokenSymbol={state.fromToken?.symbol}
+          balance={balance?.formatted}
+        />
 
-          <AmountInput
-            value={state.amount}
-            onChange={(val) => {
-              setState(prev => ({
-                ...prev,
-                amount: val,
-                quoteOutputAmount: null,
-                routeOutputAmount: null,
-                currentAction: "idle",
-                routeResponse: null,
-              }));
-            }}
-            onMaxClick={() => balance && setState(prev => ({ ...prev, amount: balance.formatted }))}
-            tokenSymbol={state.fromToken?.symbol}
-            balance={balance?.formatted}
-          />
+        <ChainSelect
+          label="To Chain (Destination)"
+          value={state.toChain}
+          disabled={false}
+          allowedChains={Object.keys(CAIP_TO_NAME)
+            .filter(id => id.startsWith("eip155"))
+            .filter(id => id !== state.fromChain)
+          }
+          onChange={handleToChainChange}
+        />
 
-          <ChainSelect
-            label="To Chain (Destination)"
-            value={state.toChain}
-            disabled={false}
-            allowedChains={Object.keys(CAIP_TO_NAME)
-              .filter(id => id.startsWith("eip155"))
-              .filter(id => id !== state.fromChain)
-            }
-            onChange={handleToChainChange}
-          />
-
-          <TokenInput
-            chainId={state.toChain}
-            label="To Token"
-            disabled={!state.toChain}
-            onValidToken={(address, symbol, decimals, isNative) => {
-              setState(prev => ({
-                ...prev,
-                toToken: { address, symbol, decimals, isNative },
-                quoteOutputAmount: null,
-                routeOutputAmount: null,
-                currentAction: "idle",
-                routeResponse: null,
-              }));
-            }}
+        <TokenInput
+          chainId={state.toChain}
+          label="To Token"
+          disabled={!state.toChain}
+          onValidToken={(address, symbol, decimals, isNative) => {
+            setState(prev => ({
+              ...prev,
+              toToken: { address, symbol, decimals, isNative },
+              quoteOutputAmount: null,
+              routeOutputAmount: null,
+              currentAction: "idle",
+              routeResponse: null,
+            }));
+          }}
         />
 
         {state.fromChain === state.toChain && state.fromChain && state.toChain && (
@@ -1113,17 +1114,17 @@ function CrossChainTradePage() {
           </p>
         </CollapsibleCallout>
 
-          {outputAmount && state.fromChain !== state.toChain && (
-            <div className="bg-gray-700 p-4 rounded-lg">
-              <p className="text-green-400 text-lg">
-                Expected Output: <strong>{outputAmount} {state.toToken?.symbol}</strong>
-                {state.isRouteLoading && <span className="text-yellow-400"> (calculating...)</span>}
-              </p>
-              <p className="text-sm text-gray-400 mt-1">
-                Cross-chain trade from {CAIP_TO_NAME[state.fromChain]} to {CAIP_TO_NAME[state.toChain]}
-              </p>
-            </div>
-          )}
+        {outputAmount && state.fromChain !== state.toChain && (
+          <div className="bg-gray-700 p-4 rounded-lg">
+            <p className="text-green-400 text-lg">
+              Expected Output: <strong>{outputAmount} {state.toToken?.symbol}</strong>
+              {state.isRouteLoading && <span className="text-yellow-400"> (calculating...)</span>}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              Cross-chain trade from {CAIP_TO_NAME[state.fromChain]} to {CAIP_TO_NAME[state.toChain]}
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-4 justify-center flex-wrap">
           {!state.routeResponse && (
@@ -1183,6 +1184,14 @@ function CrossChainTradePage() {
         </div>
 
       </form>
+
+      <OrderStatusPolling
+        orderId={state.orderId}
+        fromChain={state.fromChain}
+        environment={state.environment}
+        isVisible={!!state.orderId}
+      />
+
       <div className="mt-6 flex justify-end gap-6 w-full ">
         <button
           onClick={() => setIsHistoryOpen(true)}
@@ -1219,7 +1228,7 @@ function CrossChainTradePage() {
         history={history}
       />
       {logs.length > 0 && (<StepIndicator logs={logs} />)}
-      </div>
+    </div>
   );
 }
 
