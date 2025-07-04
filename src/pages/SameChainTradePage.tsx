@@ -608,9 +608,9 @@ function SameChainTradePage() {
   const outputAmount = state.routeOutputAmount || state.quoteOutputAmount;
 
   const actionLabel = {
-    approval: "Execute Approval Tx",
-    swap: "Execute Swap Tx",
-    idle: "Execute",
+    approval: "Sign & Execute Approval Tx",
+    swap: "Sign & Execute Swap Tx",
+    idle: "Click ‘Clear’ to start a new trade",
     get_best_route: "Get Best Route",
     get_quote: "Getting Quote..",
   }[state.currentAction];
@@ -778,8 +778,12 @@ function SameChainTradePage() {
         </div>
 
         <div className="text-sm border border-gray-400 p-3 my-3 rounded-lg bg-gray-800 text-gray-200 text-center">
-          <span>Refer to the diagram give below to understand the <strong>Same Chain Swap Flow using Okto Trade Service.</strong></span>
-          <img src={SameChainFlow} />
+          <span>
+            Refer to the diagram below to understand the <strong>Same Chain Swap Flow using Okto Trade Service.</strong>
+          </span>
+          <div className="flex justify-center mt-3">
+            <img src={SameChainFlow} alt="Same Chain Swap Flow" className="max-w-full h-auto rounded-md" />
+          </div>
         </div>
 
         <CollapsibleCallout title="Understanding Get Quote & Get Best Route" variant="info" defaultOpen={false}>
@@ -804,45 +808,48 @@ function SameChainTradePage() {
         <div className="flex gap-4 justify-center flex-wrap">
           {!state.routeResponse && (
             <>
-          <button
-            type="button"
+              {!state.quoteOutputAmount && (
+                <button
+                  type="button"
+                  className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${isDisabled
+                    ? "bg-gray-600 cursor-not-allowed"
+                    : state.quoteOutputAmount || state.routeResponse
+                      ? "bg-gray-600 text-gray-200"
+                      : "bg-blue-600 hover:bg-blue-700"
+                    }`}
+                  disabled={isDisabled}
+                  onClick={() => handleGetQuote()}
+                >
+                  {state.isTxSubmitting && state.currentAction === "get_quote"
+                    ? "Getting Quote..."
+                    : state.quoteOutputAmount || state.routeResponse
+                      ? "Proceed to Get Best Route →"
+                      : "Get Quote"
+                  }
+                </button>
+              )}
+              <button
+                type="button"
                 className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${isDisabled
-                ? "bg-gray-600 cursor-not-allowed"
-              : state.quoteOutputAmount || state.routeResponse
-                ? "bg-gray-600 text-gray-200"
-                : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            disabled={isDisabled}
-            onClick={() => handleGetQuote()}
-          >
-            {state.isTxSubmitting && state.currentAction === "get_quote"
-              ? "Getting Quote..."
-              : state.quoteOutputAmount || state.routeResponse
-                ? "Proceed to Get Best Route →"
-                : "Get Quote"
-            }
-          </button>
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : state.routeResponse
+                    ? "bg-gray-600 text-gray-200"
+                    : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                disabled={isDisabled}
+                onClick={() => handleGetBestRoute()}
+              >
+                {state.isTxSubmitting && state.currentAction === "get_best_route"
+                  ? "Getting Route..."
+                  : state.routeResponse
+                    ? "Get Route Done "
+                    : "Get Route"
+                }
+              </button>
+            </>
+          )}
 
-          <button
-            type="button"
-                className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${isDisabled
-              ? "bg-gray-600 cursor-not-allowed"
-              : state.routeResponse
-                ? "bg-gray-600 text-gray-200"
-                : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            disabled={isDisabled}
-            onClick={() => handleGetBestRoute()}
-          >
-            {state.isTxSubmitting && state.currentAction === "get_best_route"
-              ? "Getting Route..."
-              : state.routeResponse
-                ? "Get Route Done "
-                : "Get Route"
-            }
-          </button>
-            </>)}
-
+          {state.routeResponse && (
           <button
             type="submit"
             className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${!state.routeOutputAmount
@@ -854,7 +861,7 @@ function SameChainTradePage() {
             disabled={isDisabled}
           >
             {state.isTxSubmitting ? "Processing..." : actionLabel}
-          </button>
+            </button>)}
         </div>
       </form>
       <div className="mt-6 flex justify-end gap-6 w-full ">
