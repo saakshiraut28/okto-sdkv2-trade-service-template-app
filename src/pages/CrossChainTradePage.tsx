@@ -831,7 +831,7 @@ function CrossChainTradePage() {
 
       await openResponseModal(
         "Register Intent Response",
-        "Cross-chain order registered",
+        "Copy & Save this order ID, it is required to track and fetch the order details.",
         intentRes
       );
       addToHistory("Register Intent", registerPayload, intentRes);
@@ -936,7 +936,7 @@ function CrossChainTradePage() {
     init_bridge_txn: "Sign & Execute Init Txn",
     register_intent: "Register Intent",
     get_best_route: "Get Best Route",
-    idle: "Sign Permit Data",
+    idle: "Get Order Details",
     get_quote: "Get Quote",
     get_order_details: "Get Order Details",
   }[state.currentAction];
@@ -1209,8 +1209,7 @@ function CrossChainTradePage() {
             setState(prev => ({
               ...prev,
               fromToken: null,
-              fromChain: "",
-              toChain: "",
+              toToken: null,
               amount: "",
               quoteOutputAmount: null,
               routeOutputAmount: null,
