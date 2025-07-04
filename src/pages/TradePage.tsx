@@ -32,6 +32,14 @@ function TradePage() {
         )}
 
         {canTrade && (
+          <div className="mb-6 mx-auto w-full border-1 border-yellow-700 bg-gray-900 text-white p-4 rounded-lg shadow-sm">
+            <p className="text-sm">
+              ⚠️ In case of transaction failure, a refund will be processed on either the source or destination chain, depending on the state of the transaction when the failure occurred. For detailed information on refund eligibility and processing, refer to the <a href="https://docs.okto.tech/docs/trade-service/refunds" target="_blank" className="text-indigo-400 hover:text-blue-400 hover:underline">Trade Service Refund</a> documentation.
+            </p>
+          </div>
+        )}
+
+        {canTrade && (
           <>
             <div className="flex justify-center mt-4">
               <div className="flex gap-2 bg-gray-700 rounded-full w-fit p-1">
