@@ -931,9 +931,9 @@ function CrossChainTradePage() {
 
   const actionLabel = {
     accept: "Sign Permit Data",
-    approval: "Execute Approve Tx",
+    approval: "Sign & Execute Approve Tx",
     generate_call_data: "Get Call Data",
-    init_bridge_txn: "Execute Init Txn",
+    init_bridge_txn: "Sign & Execute Init Txn",
     register_intent: "Register Intent",
     get_best_route: "Get Best Route",
     idle: "Sign Permit Data",
@@ -1129,24 +1129,26 @@ function CrossChainTradePage() {
         <div className="flex gap-4 justify-center flex-wrap">
           {!state.routeResponse && (
             <>
-              <button
-                type="button"
-                className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${state.quoteOutputAmount || state.routeOutputAmount
-                  ? "bg-gray-600 cursor-not-allowed"
-                  : isDisabled
+              {!state.quoteOutputAmount && (
+                <button
+                  type="button"
+                  className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${state.quoteOutputAmount || state.routeOutputAmount
                     ? "bg-gray-600 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                disabled={isDisabled}
-                onClick={handleGetQuote}
-              >
-                {state.isTxSubmitting && state.currentAction === "get_quote"
-                  ? "Getting Quote..."
-                  : state.quoteOutputAmount || state.routeOutputAmount
-                    ? "Proceed with Get Best Route →"
-                    : "Get Quote"
-                }
-              </button>
+                    : isDisabled
+                      ? "bg-gray-600 cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700"
+                    }`}
+                  disabled={isDisabled}
+                  onClick={handleGetQuote}
+                >
+                  {state.isTxSubmitting && state.currentAction === "get_quote"
+                    ? "Getting Quote..."
+                    : state.quoteOutputAmount || state.routeOutputAmount
+                      ? "Proceed with Get Best Route →"
+                      : "Get Quote"
+                  }
+                </button>
+              )}
 
               <button
                 type="button"
@@ -1169,20 +1171,22 @@ function CrossChainTradePage() {
             </>
           )}
 
-          <button
-            type="submit"
-            className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${!state.routeOutputAmount
-              ? "bg-gray-600 cursor-not-allowed"
-              : isDisabled
+          {state.routeResponse && (
+            <button
+              type="submit"
+              className={`w-[220px] px-6 py-3 text-sm rounded-full font-medium transition ${!state.routeOutputAmount
                 ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            disabled={isDisabled}
-          >
-            {state.isTxSubmitting ? "Processing..." : actionLabel}
-          </button>
-        </div>
+                : isDisabled
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              disabled={isDisabled}
+            >
+              {state.isTxSubmitting ? "Processing..." : actionLabel}
+            </button>
+          )}
 
+        </div>
       </form>
 
       <OrderStatusPolling
