@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ethers } from "ethers";
@@ -19,6 +19,10 @@ import TokenInput from "../components/TokenInput";
 import ChainSelect from "../components/ChainSelect";
 import AmountInput from "../components/AmountInput";
 import RequestResponseModal from "../components/RequestResponseModal";
+import HistoryModal from "../components/HistoryModal";
+import CollapsibleCallout from "../components/CollapsibleCallout";
+import StepIndicator from "../components/StepIndicatior";
+import OrderStatusPolling, { OrderStatusPollingHandle } from "../components/OrderStatusPolling";
 
 import { CAIP_TO_NAME } from "../constants/chains";
 import {
@@ -28,14 +32,9 @@ import {
   registerIntent,
   getOrderDetails,
 } from "../api/tradeServiceClient";
-import HistoryModal from "../components/HistoryModal";
-import CollapsibleCallout from "../components/CollapsibleCallout";
-import StepIndicator from "../components/StepIndicatior";
-import OrderStatusPolling from "../components/OrderStatusPolling";
 import { useTradeService } from "../context/TradeServiceContext";
 import { extractOrderIdFromReceipt } from "../utils/extractOrderId";
 
-// Types
 interface HistoryEntry {
   title: string;
   requestPayload: any;
@@ -63,7 +62,7 @@ interface CrossChainTradeState {
   quoteOutputAmount: string | null;
   routeOutputAmount: string | null;
   routeResponse: any | null;
-  currentAction: "idle" | "get_quote" | "accept" | "generate_call_data" | "init_bridge_txn" | "register_intent" | "get_best_route" | "approval" | "get_order_details";
+  currentAction: "idle" | "get_quote" | "accept" | "generate_call_data" | "init_bridge_txn" | "register_intent" | "get_best_route" | "approval" | "get_order_details" | "sign_order_data";
   isQuoteLoading: boolean;
   isRouteLoading: boolean;
   isTxSubmitting: boolean;
@@ -80,6 +79,8 @@ interface CrossChainTradeState {
   registerIntentReq: any | null;
   registerIntentResponse: any | null;
   orderId?: `0x${string}` | string;
+  orderSignature: string;
+  isOrderPollingStarted: boolean;
 }
 
 function CrossChainTradePage() {
@@ -92,6 +93,7 @@ function CrossChainTradePage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>(["Initializing cross-chain trade flow..."]);
   const fstSupportedTokens = ["USDC"];
+  const pollingRef = useRef<OrderStatusPollingHandle>(null);
   const [state, setState] = React.useState<CrossChainTradeState>({
     environment: environment,
     fromChain: "",
@@ -119,6 +121,8 @@ function CrossChainTradePage() {
     registerIntentReq: null,
     registerIntentResponse: null,
     orderId: "",
+    orderSignature: "",
+    isOrderPollingStarted: false
   });
 
   const isFstFlow = state.fromToken?.symbol === undefined || fstSupportedTokens.includes(state.fromToken?.symbol);
@@ -550,9 +554,9 @@ function CrossChainTradePage() {
         setLogs(prev => [...prev, "✔️ Approval not needed, proceeding to initialize bridge transaction"]);
         setState(prev => ({ ...prev, currentAction: "init_bridge_txn" }));
       } else if (!transactionType) {
-        console.log("after call data if txn type is not available set current action state to register_intent");
-        setLogs(prev => [...prev, "✔️ Approval not needed, proceeding to register intent"]);
-        setState(prev => ({ ...prev, currentAction: "register_intent" }));
+        console.log("after call data if txn type is not available set current action state to sign_order_data");
+        setLogs(prev => [...prev, "✔️ Approval not needed, proceeding to sign_order_data"]);
+        setState(prev => ({ ...prev, currentAction: "sign_order_data" }));
       } else {
         toast.error("Unknown bridge transaction type");
         setState(prev => ({ ...prev, currentAction: "idle" }));
@@ -648,9 +652,9 @@ function CrossChainTradePage() {
           setLogs(prev => [...prev, "✔️ Approval transaction confirmed, proceeding to execute init txn"]);
           setState(prev => ({ ...prev, currentAction: "init_bridge_txn" }));
         } else if (!metaData.transactionType) {
-          console.log("After approval, moving to register_intent");
+          console.log("After approval, moving to sign_order_data");
           setLogs(prev => [...prev, "✔️ Approval transaction confirmed, proceeding to execute sign order data"]);
-          setState(prev => ({ ...prev, currentAction: "register_intent" }));
+          setState(prev => ({ ...prev, currentAction: "sign_order_data" }));
         } else {
           toast.error("Unknown transaction type after approval");
           setState(prev => ({ ...prev, currentAction: "idle" }));
@@ -752,14 +756,14 @@ function CrossChainTradePage() {
     }
   };
 
-  // Register intent (final step)
-  const handleRegisterIntent = async () => {
-    console.log("Register Intent called");
+  // Signed order type data.
+  const handleSignOrderData = async () => {
+    console.log("Sign Order Typed Data called");
     const responseToUse = state.callDataResponse;
-    console.log("CALLDATA RES: ", responseToUse)
+
     if (!responseToUse || !address) {
-      toast.error("Missing route data for intent registration");
-      return;
+      toast.error("Missing route data for order signing");
+      return null;
     }
 
     try {
@@ -769,8 +773,8 @@ function CrossChainTradePage() {
 
       if (!orderTypedDataRaw) {
         toast.error("Missing order typed data.");
-        setState(prev => ({ ...prev, currentAction: "idle", isTxSubmitting: false }));
-        return;
+        setState(prev => ({ ...prev, isTxSubmitting: false }));
+        return null;
       }
 
       const parsedData = typeof orderTypedDataRaw === "string"
@@ -785,15 +789,43 @@ function CrossChainTradePage() {
           method: 'eth_signTypedData_v4',
           params,
         });
-        setLogs(prev => [...prev, "✔️ Order signature obtained, proceeding to register intent"]);
+        setState(prev => ({ ...prev, isTxSubmitting: false, orderSignature: signature }));
+
+        setLogs(prev => [...prev, "✔️ Order signature obtained successfully, proceeding to register_intent"]);
+        setState(prev => ({ ...prev, currentAction: "register_intent" }));
       } catch (err) {
         toast.error("Signing failed");
         console.error(err);
-        return;
+        setState(prev => ({ ...prev, isTxSubmitting: false }));
+        return null;
       }
+    } catch (err) {
+      console.error("Failed to sign order:", err);
+      toast.error("Failed to sign order");
+      setState(prev => ({ ...prev, isTxSubmitting: false }));
+      return null;
+    }
+  }
+
+  // Register intent (final step)
+  const handleRegisterIntent = async (orderSignature) => {
+    console.log("Register Intent called with order signature ", orderSignature);
+
+    if (!orderSignature) {
+      toast.error("Missing order signature for intent registration");
+      return;
+    }
+
+    if (!state.callDataResponse || !address) {
+      toast.error("Missing route data for intent registration");
+      return;
+    }
+
+    try {
+      setState(prev => ({ ...prev, isTxSubmitting: true }));
 
       const intentStep = state.callDataResponse.steps?.find(
-        (s: any) =>
+        (s) =>
           s.type === "intent" &&
           s.metadata?.serviceType === "bridge" &&
           s.metadata?.protocol === "Okto-ULL"
@@ -803,20 +835,22 @@ function CrossChainTradePage() {
 
       if (!intentCalldata) {
         toast.error("Missing call data bytes.");
+        setState(prev => ({ ...prev, currentAction: "idle", isTxSubmitting: false }));
         return;
       }
 
       const registerPayload = {
         orderBytes: intentCalldata,
-        orderBytesSignature: signature,
+        orderBytesSignature: orderSignature,
         caipId: state.fromChain,
       };
+
       setState(prev => ({ ...prev, registerIntentReq: registerPayload }));
 
       await new Promise<void>((resolve) => {
         openRequestModal(
           "Register Intent Request",
-          "Registering cross-chain intent",
+          `Registering cross-chain intent`,
           registerPayload,
           async () => {
             setState(prev => ({ ...prev, modalOpen: false }));
@@ -834,6 +868,7 @@ function CrossChainTradePage() {
         "Copy & Save this order ID, it is required to track and fetch the order details.",
         intentRes
       );
+
       addToHistory("Register Intent", registerPayload, intentRes);
       console.log("Register Intent Response: ", intentRes);
       setState(prev => ({ ...prev, orderId: intentRes }));
@@ -847,39 +882,29 @@ function CrossChainTradePage() {
   };
 
   const handleGetOrderDetails = async (orderId: string) => {
-    console.log("Get Order Details called with orderId:", orderId);
-
     if (!orderId || !state.fromChain) {
-      toast.error("Missing orderId or chain information for fetching order details");
+      toast.error("Missing orderId or chain for fetching order details.");
       return;
     }
 
-    const orderDetailsPayload = {
-      orderId,
-      caipId: state.fromChain,
-    };
+    const orderDetailsPayload = { orderId, caipId: state.fromChain };
 
     try {
-      console.log("Order Details Payload:", orderDetailsPayload);
-
       await new Promise<void>((resolve) => {
         openRequestModal(
           "Get Order Details Request",
           "Get Order Details",
           orderDetailsPayload,
           async () => {
-            setState(prev => ({ ...prev, modalOpen: false }));
+            setState((prev) => ({ ...prev, modalOpen: false }));
             resolve();
           }
         );
       });
 
-      // @ts-ignore
       const orderDetailsRes = await getOrderDetails(state.environment, orderDetailsPayload);
-      console.log("Get Order Details Response:", orderDetailsRes);
 
       addToHistory("Get Order Details", orderDetailsPayload, orderDetailsRes);
-
       await openRequestResponseModal(
         "Get Order Details Response",
         "Order details retrieved",
@@ -888,20 +913,21 @@ function CrossChainTradePage() {
       );
 
       toast.success("Order details retrieved successfully!");
-      setLogs(prev => [...prev, "✔️ Order details retrieved successfully!"]);
-      setState(prev => ({
+      setLogs((prev) => [...prev, "✔️ Order details retrieved successfully!"]);
+
+      pollingRef.current?.startPolling();
+      setState((prev) => ({ ...prev, isOrderPollingStarted: true }))
+
+      setState((prev) => ({
         ...prev,
         currentAction: "idle",
         isTxSubmitting: false,
       }));
-
     } catch (err) {
       console.error("Failed to get order details:", err);
-      toast.error("Failed to get order details");
+      toast.error("Failed to get order details.");
     }
   };
-
-
 
   if (!isConnected) {
     return (
@@ -939,6 +965,7 @@ function CrossChainTradePage() {
     idle: "Get Order Details",
     get_quote: "Get Quote",
     get_order_details: "Get Order Details",
+    sign_order_data: "Sign Order Data"
   }[state.currentAction];
 
   return (
@@ -977,8 +1004,10 @@ function CrossChainTradePage() {
             handleGenerateCallData();
           } else if (state.currentAction === "init_bridge_txn") {
             handleInitBridgeTransaction();
+          } else if (state.currentAction === "sign_order_data") {
+            handleSignOrderData();
           } else if (state.currentAction === "register_intent") {
-            handleRegisterIntent();
+            handleRegisterIntent(state.orderSignature);
           } else if (state.currentAction === "get_quote") {
             handleGetQuote();
           } else if (state.currentAction === "get_best_route") {
@@ -1189,12 +1218,13 @@ function CrossChainTradePage() {
         </div>
       </form>
 
-      <OrderStatusPolling
+      {state.isOrderPollingStarted && (<OrderStatusPolling
+        ref={pollingRef}
         orderId={state.orderId}
         fromChain={state.fromChain}
         environment={state.environment}
         isVisible={!!state.orderId}
-      />
+      />)}
 
       <div className="mt-6 flex justify-end gap-6 w-full ">
         <button
@@ -1215,6 +1245,7 @@ function CrossChainTradePage() {
               routeOutputAmount: null,
               currentAction: "idle",
               routeResponse: null,
+              isOrderPollingStarted: false,
             }));
             setLogs([]);
             setHistory([]);
