@@ -73,7 +73,7 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
         toast.error("No order ID available for polling.");
         return;
       }
-      if (pollingIntervalRef.current) return; // prevent multiple polling loops
+      if (pollingIntervalRef.current) return; 
 
       fetchOrderStatus();
       pollingIntervalRef.current = setInterval(fetchOrderStatus, 10000);
@@ -94,14 +94,13 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
     }));
 
     useEffect(() => {
-      return () => stopPolling(); // cleanup on unmount
+      return () => stopPolling(); 
     }, []);
 
     if (!isVisible || !orderId) {
       return null;
     }
 
-    // Maps raw status codes to technical doc tone display
     const getDisplayStatus = (status?: string) => {
       switch (status) {
         case "-1":
@@ -164,7 +163,7 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
           {orderStatus && (
             <>
               <div className="flex items-center justify-between">
-                <span className="text-gray-300">orderData.status:</span>
+                <span className="text-gray-300">Order Status:</span>
                 <span
                   className={`font-semibold ${getStatusColor(orderStatus.status)}`}
                 >
