@@ -54,9 +54,9 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
 
         console.log("Order status updated:", response);
 
-        if (response?.status?.toString() === "1") {
+        if (response?.status?.toString() === "2" || response?.status?.toString() === "4" || response?.status?.toString() === "-1") {
           stopPolling();
-          toast.success("Order completed successfully.");
+          toast.success("Order reached a terminal state.");
         }
         return response;
       } catch (error) {
@@ -73,7 +73,7 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
         toast.error("No order ID available for polling.");
         return;
       }
-      if (pollingIntervalRef.current) return; 
+      if (pollingIntervalRef.current) return; // prevent multiple polling loops
 
       fetchOrderStatus();
       pollingIntervalRef.current = setInterval(fetchOrderStatus, 10000);
@@ -94,23 +94,50 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
     }));
 
     useEffect(() => {
-      return () => stopPolling();
+      return () => stopPolling(); // cleanup on unmount
     }, []);
 
     if (!isVisible || !orderId) {
       return null;
     }
 
+    // Maps raw status codes to technical doc tone display
     const getDisplayStatus = (status?: string) => {
-      if (status === "0") return "In Progress";
-      if (status === "1") return "Successful";
-      return status || "Unknown";
+      switch (status) {
+        case "-1":
+          return "Expired (Terminal)";
+        case "0":
+          return "Order received by the backend but not yet registered on-chain.";
+        case "1":
+          return "Order registered on-chain but not yet filled.";
+        case "2":
+          return "Order settled successfully. Terminal state.";
+        case "3":
+          return "Order in dispute. The order was filled but not yet settled.";
+        case "4":
+          return "Order Refunded (Terminal)";
+        default:
+          return "Unknown";
+      }
     };
 
     const getStatusColor = (status?: string) => {
-      if (status === "0") return "text-yellow-400";
-      if (status === "1") return "text-green-400";
-      return "text-blue-400";
+      switch (status) {
+        case "-1":
+          return "text-red-400";
+        case "0":
+          return "text-yellow-400";
+        case "1":
+          return "text-blue-400";
+        case "2":
+          return "text-green-400";
+        case "3":
+          return "text-orange-400";
+        case "4":
+          return "text-purple-400";
+        default:
+          return "text-gray-400";
+      }
     };
 
     return (
@@ -137,7 +164,7 @@ const OrderStatusPolling = forwardRef<OrderStatusPollingHandle, OrderStatusPolli
           {orderStatus && (
             <>
               <div className="flex items-center justify-between">
-                <span className="text-gray-300">Status:</span>
+                <span className="text-gray-300">orderData.status:</span>
                 <span
                   className={`font-semibold ${getStatusColor(orderStatus.status)}`}
                 >
